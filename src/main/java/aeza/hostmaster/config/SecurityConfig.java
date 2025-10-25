@@ -4,6 +4,7 @@ import aeza.hostmaster.agents.services.AgentService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.dao.DaoAuthenticationProvider;
 import org.springframework.security.config.Customizer;
@@ -18,7 +19,7 @@ import org.springframework.security.web.SecurityFilterChain;
 @EnableMethodSecurity
 public class SecurityConfig {
 
-    public SecurityConfig(AgentService agentService) {
+    public SecurityConfig(@Lazy AgentService agentService) {
         this.agentService = agentService;
     }
     private final AgentService agentService;
