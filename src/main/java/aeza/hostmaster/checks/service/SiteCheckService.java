@@ -1,89 +1,134 @@
 package aeza.hostmaster.checks.service;
 
-import aeza.hostmaster.checks.dto.CheckExecutionRequest;
-import aeza.hostmaster.checks.dto.CheckMetricDto;
-import aeza.hostmaster.checks.dto.SiteCheckRequest;
-import aeza.hostmaster.checks.dto.SiteCheckResponse;
-import aeza.hostmaster.checks.repository.SiteCheckResultRepository;
-import java.util.UUID;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.Pageable;
+import aeza.hostmaster.checks.domain.CheckStatus;
+import aeza.hostmaster.checks.domain.CheckType;
+import aeza.hostmaster.checks.dto.*;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.reactive.function.client.WebClient;
+import reactor.core.publisher.Mono;
+
+import java.time.Duration;
+import java.time.Instant;
+import java.util.List;
+import java.util.UUID;
 
 @Service
 public class SiteCheckService {
 
-    private final SiteCheckResultRepository repository;
-    private final SiteCheckMapper mapper;
+    private final WebClient webClient;
 
-    public SiteCheckService(SiteCheckResultRepository repository, SiteCheckMapper mapper) {
-        this.repository = repository;
-        this.mapper = mapper;
+    public SiteCheckService(WebClient.Builder webClientBuilder) {
+        this.webClient = webClientBuilder
+                .baseUrl("")
+                .build();
     }
 
-    @Transactional
-    public SiteCheckResponse create(SiteCheckRequest request) {
-        validateRequest(request);
-        var entity = mapper.toEntity(request);
-        var saved = repository.save(entity);
-        return mapper.toResponse(saved);
+    public SiteCheckResponse performSiteCheck(SiteCheckCreateRequest request) {
+        Instant startTime = Instant.now();
+
+        try {
+            // Выполняем реальный HTTP запрос
+            var httpResult = performHttpCheck(request.target());
+            Instant endTime = Instant.now();
+            long totalDuration = Duration.between(startTime, endTime).toMillis();
+
+            // Создаем ответ с реальными данными проверки
+            return new SiteCheckResponse(
+                    UUID.randomUUID(),
+                    request.target(),
+                    Instant.now(),
+                    httpResult.status(),
+                    totalDuration,
+                    List.of(httpResult)
+            );
+
+        } catch (Exception e) {
+            Instant endTime = Instant.now();
+            long totalDuration = Duration.between(startTime, endTime).toMillis();
+
+            // Создаем ответ с ошибкой
+            return new SiteCheckResponse(
+                    UUID.randomUUID(),
+                    request.target(),
+                    Instant.now(),
+                    CheckStatus.FAIL,
+                    totalDuration,
+                    List.of(createErrorCheckExecution(e.getMessage(), totalDuration))
+            );
+        }
     }
 
-    @Transactional(readOnly = true)
-    public SiteCheckResponse get(UUID id) {
-        var entity = repository.findById(id).orElseThrow(() -> new SiteCheckNotFoundException(id));
-        return mapper.toResponse(entity);
+    private CheckExecutionResponse performHttpCheck(String target) {
+        Instant startTime = Instant.now();
+
+        try {
+            var response = webClient.get()
+                    .uri(target)
+                    .retrieve()
+                    .toBodilessEntity()
+                    .block(Duration.ofSeconds(30));
+
+            Instant endTime = Instant.now();
+            long duration = Duration.between(startTime, endTime).toMillis();
+
+            HttpStatus status = (HttpStatus) response.getStatusCode();
+            boolean isSuccess = status.is2xxSuccessful() || status.is3xxRedirection();
+
+            return new CheckExecutionResponse(
+                    UUID.randomUUID(),
+                    CheckType.HTTP,
+                    isSuccess ? CheckStatus.OK : CheckStatus.FAIL,
+                    duration,
+                    status.value() + " " + status.getReasonPhrase(),
+                    new HttpCheckDetailsDto(
+                            "GET",
+                            status.value(),
+                            duration,
+                            response.getHeaders().toSingleValueMap()
+                    ),
+                    null, // pingDetails
+                    null, // tcpDetails
+                    null, // tracerouteDetails
+                    null, // dnsLookupDetails
+                    List.of() // metrics
+            );
+
+        } catch (Exception e) {
+            Instant endTime = Instant.now();
+            long duration = Duration.between(startTime, endTime).toMillis();
+
+            return new CheckExecutionResponse(
+                    UUID.randomUUID(),
+                    CheckType.HTTP,
+                    CheckStatus.FAIL,
+                    duration,
+                    "Error: " + e.getMessage(),
+                    new HttpCheckDetailsDto(
+                            "GET",
+                            0,
+                            duration,
+                            java.util.Map.of()
+                    ),
+                    null, null, null, null, List.of()
+            );
+        }
     }
 
-    @Transactional(readOnly = true)
-    public Page<SiteCheckResponse> find(String target, Pageable pageable) {
-        var page = (target == null || target.isBlank())
-                ? repository.findAll(pageable)
-                : repository.findByTargetContainingIgnoreCase(target, pageable);
-        return page.map(mapper::toResponse);
-    }
-
-    private void validateRequest(SiteCheckRequest request) {
-        if (request == null) {
-            throw new InvalidCheckDetailsException("Request payload is required");
-        }
-        if (request.target() == null || request.target().isBlank()) {
-            throw new InvalidCheckDetailsException("Target must not be blank");
-        }
-        if (request.executedAt() == null) {
-            throw new InvalidCheckDetailsException("Execution timestamp is required");
-        }
-        if (request.status() == null) {
-            throw new InvalidCheckDetailsException("Overall status is required");
-        }
-        if (request.totalDurationMillis() == null || request.totalDurationMillis() < 0) {
-            throw new InvalidCheckDetailsException("Total duration must be zero or positive");
-        }
-        if (request.checks() == null || request.checks().isEmpty()) {
-            throw new InvalidCheckDetailsException("At least one check result must be provided");
-        }
-        for (int i = 0; i < request.checks().size(); i++) {
-            CheckExecutionRequest check = request.checks().get(i);
-            if (check == null) {
-                throw new InvalidCheckDetailsException("Check entry %d is missing".formatted(i));
-            }
-            if (check.type() == null) {
-                throw new InvalidCheckDetailsException("Check type is required for entry %d".formatted(i));
-            }
-            if (check.status() == null) {
-                throw new InvalidCheckDetailsException("Check status is required for entry %d".formatted(i));
-            }
-            if (check.durationMillis() == null || check.durationMillis() < 0) {
-                throw new InvalidCheckDetailsException("Check duration must be zero or positive for entry %d".formatted(i));
-            }
-            if (check.metrics() != null) {
-                for (CheckMetricDto metric : check.metrics()) {
-                    if (metric == null || metric.name() == null || metric.name().isBlank()) {
-                        throw new InvalidCheckDetailsException("Metric name is required for check entry %d".formatted(i));
-                    }
-                }
-            }
-        }
+    private CheckExecutionResponse createErrorCheckExecution(String errorMessage, long duration) {
+        return new CheckExecutionResponse(
+                UUID.randomUUID(),
+                CheckType.HTTP,
+                CheckStatus.FAIL,
+                duration,
+                errorMessage,
+                new HttpCheckDetailsDto(
+                        "GET",
+                        0,
+                        duration,
+                        java.util.Map.of()
+                ),
+                null, null, null, null, List.of()
+        );
     }
 }

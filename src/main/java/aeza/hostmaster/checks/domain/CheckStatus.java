@@ -1,11 +1,20 @@
 package aeza.hostmaster.checks.domain;
 
-/**
- * Represents the outcome of a single monitoring check or an aggregated run.
- */
+import com.fasterxml.jackson.annotation.JsonCreator;
+
 public enum CheckStatus {
-    SUCCESS,
-    FAILURE,
-    PARTIAL,
-    UNKNOWN
+    OK,
+    WARN,
+    FAILED,
+    UNKNOWN, FAIL;
+
+    @JsonCreator
+    public static CheckStatus from(String s) {
+        if (s == null) return null;
+        try {
+            return CheckStatus.valueOf(s.toUpperCase());
+        } catch (IllegalArgumentException ex) {
+            return UNKNOWN;
+        }
+    }
 }
