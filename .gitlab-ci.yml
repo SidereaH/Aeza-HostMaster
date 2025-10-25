@@ -1,0 +1,14 @@
+stages:
+  - build
+
+build-compose:
+  stage: build
+  tags:
+    - aeza-runner
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+  before_script:
+    - docker info
+    - docker compose version
+  script:
+    - docker compose build --pull --no-cache
