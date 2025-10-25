@@ -76,7 +76,10 @@ public class KafkaSiteCheckService {
         return jobService.getJobStatus(jobId);
     }
 
-    @KafkaListener(topics = CHECK_RESULTS_TOPIC)
+    @KafkaListener(
+            topics = CHECK_RESULTS_TOPIC,
+            autoStartup = "${app.kafka.agent-listeners-enabled:false}"
+    )
     public void handleSiteCheckResult(ConsumerRecord<String, String> record) {
         if (tryProcessAggregatedResult(record)) {
             return;
@@ -95,7 +98,10 @@ public class KafkaSiteCheckService {
         }
     }
 
-    @KafkaListener(topics = AGENT_LOGS_TOPIC)
+    @KafkaListener(
+            topics = AGENT_LOGS_TOPIC,
+            autoStartup = "${app.kafka.agent-listeners-enabled:false}"
+    )
     public void handleAgentLog(ConsumerRecord<String, String> record) {
         UUID jobId;
         try {
