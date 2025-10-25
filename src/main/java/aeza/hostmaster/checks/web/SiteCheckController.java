@@ -1,9 +1,7 @@
 package aeza.hostmaster.checks.web;
 
 import aeza.hostmaster.checks.dto.SiteCheckCreateRequest;
-import aeza.hostmaster.checks.dto.SiteCheckResponse;
-import aeza.hostmaster.checks.service.SiteCheckService;
-import jakarta.validation.Valid;
+import aeza.hostmaster.checks.service.KafkaSiteCheckService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -11,17 +9,21 @@ import org.springframework.web.bind.annotation.*;
 @RequestMapping("/api/site-checks")
 public class SiteCheckController {
 
-    private final SiteCheckService siteCheckService;
+    private final KafkaSiteCheckService kafkaSiteCheckService;
 
-    public SiteCheckController(SiteCheckService siteCheckService) {
-        this.siteCheckService = siteCheckService;
+    public SiteCheckController(KafkaSiteCheckService kafkaSiteCheckService) {
+        this.kafkaSiteCheckService = kafkaSiteCheckService;
     }
 
     @PostMapping
-    public ResponseEntity<SiteCheckResponse> createSiteCheck(
-            @Valid @RequestBody SiteCheckCreateRequest request) {
+    public ResponseEntity<String> createSiteCheck(
+            @RequestBody SiteCheckCreateRequest request) {
 
-        SiteCheckResponse response = siteCheckService.performSiteCheck(request);
-        return ResponseEntity.ok(response);
+        try {
+            kafkaSiteCheckService.sendSiteCheckTask(request);
+            return ResponseEntity.accepted().body("Site check task sent to Kafka");
+        } catch (Exception e) {
+            return ResponseEntity.status(500).body("Failed to send task to Kafka: " + e.getMessage());
+        }
     }
 }
