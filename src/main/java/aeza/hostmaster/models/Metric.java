@@ -36,13 +36,4 @@ public class Metric {
         dto.setTimestamp(timestamp);
         return dto;
     }
-
-    @Data
-    public class AgentRating {
-        private String agentId;
-        private String agentName;
-        private double averageLatency;
-        private double averageAvailability;
-        private int totalRequestCount;
-    }
 }

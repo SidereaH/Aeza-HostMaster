@@ -8,5 +8,4 @@ import java.util.Optional;
 
 @Repository
 public interface MetricRepository extends JpaRepository<Metric, Long> {
-
 }
