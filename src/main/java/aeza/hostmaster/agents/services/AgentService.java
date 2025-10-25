@@ -46,7 +46,7 @@ public class AgentService implements UserDetailsService {
         Agent a = new Agent();
         a.setAgentName(req.getAgentName());
         a.setIpAddress(req.getIpAddress());
-        a.setAgentCountry(req.getAgentCountry());
+        a.setAgentCountry(req.getCountry());
         a.setAgentToken(hashed); // хеш в БД
         a = agentRepo.save(a);
 
@@ -156,7 +156,7 @@ public class AgentService implements UserDetailsService {
         dto.setId(agent.getId());
         dto.setAgentName(agent.getAgentName());
         dto.setIpAddress(agent.getIpAddress());
-        dto.setAgentCountry(agent.getAgentCountry());
+        dto.setCountry(agent.getAgentCountry());
         dto.setCreatedAt(agent.getCreatedAt());
         dto.setUpdatedAt(agent.getUpdatedAt());
         dto.setLastHeartbeat(agent.getLastHeartbeat());
