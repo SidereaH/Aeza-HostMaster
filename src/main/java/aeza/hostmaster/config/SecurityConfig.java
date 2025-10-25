@@ -21,12 +21,9 @@ public class SecurityConfig {
     public SecurityConfig(AgentService agentService) {
         this.agentService = agentService;
     }
-    private final AgentService agentService; // реализует UserDetailsService
-    // если AgentService не помечен как @Service, то внедрите ваш UserDetailsService
-
+    private final AgentService agentService;
     @Bean
     public PasswordEncoder passwordEncoder() {
-        // strength = 10 по умолчанию; можно увеличить, если нужно
         return new BCryptPasswordEncoder();
     }
 
@@ -35,33 +32,27 @@ public class SecurityConfig {
         DaoAuthenticationProvider provider = new DaoAuthenticationProvider();
         provider.setUserDetailsService(agentService);
         provider.setPasswordEncoder(passwordEncoder);
-        // Можно настроить скрытие деталей ошибок:
+
         provider.setHideUserNotFoundExceptions(true);
         return provider;
     }
 
-    // AuthenticationManager нужен, если будете вручную аутентифицировать где-то
     @Bean
     public AuthenticationManager authenticationManager(AuthenticationConfiguration authConfig) throws Exception {
         return authConfig.getAuthenticationManager();
     }
 
-    // Основная конфигурация HTTP безопасности
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
         http
-            .csrf(csrf -> csrf.disable()) // для API обычно отключают, если не используете cookie-based сессии
-            .authenticationProvider(daoAuthenticationProvider(passwordEncoder()))
-            .authorizeHttpRequests(auth -> auth
-                // публичные endpoint'ы (регистрация и возможно docs)
-                .requestMatchers("/api/agents/register", "/api/docs/**", "/actuator/health").permitAll()
-                // все остальные /api/agents/** требуют аутентификации
-                .requestMatchers("/api/agents/**").hasRole("AGENT")
-                // другие endpoint'ы — для админов/разработчиков можно отдельно
-                .anyRequest().authenticated()
-            )
-            .httpBasic(Customizer.withDefaults()) // включаем HTTP Basic
-            .sessionManagement(session -> session.disable());
+                .csrf(csrf -> csrf.disable())
+                .authorizeHttpRequests(auth -> auth
+                        .requestMatchers("/api/agents/register").permitAll()
+                        .requestMatchers("/api/agents/**").hasRole("AGENT")
+                        .anyRequest().authenticated()
+                )
+                .httpBasic(Customizer.withDefaults())
+                .sessionManagement(session -> session.disable());
 
         return http.build();
     }

@@ -4,15 +4,17 @@ import aeza.hostmaster.agents.controller.AgentController;
 import aeza.hostmaster.agents.dto.AgentDTO;
 import aeza.hostmaster.agents.dto.AgentRegistrationRequest;
 import aeza.hostmaster.agents.services.AgentService;
+import aeza.hostmaster.config.SecurityConfig;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
+import org.springframework.context.annotation.Import;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.http.MediaType;
+import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
@@ -21,11 +23,12 @@ import java.util.List;
 
 import static org.hamcrest.Matchers.*;
 import static org.mockito.ArgumentMatchers.*;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 @WebMvcTest(controllers = AgentController.class)
-@AutoConfigureMockMvc(addFilters = false)
+@Import(SecurityConfig.class) //
 class AgentControllerTest {
 
     @Autowired
@@ -45,13 +48,14 @@ class AgentControllerTest {
 
         mockMvc.perform(post("/api/agents/register")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(mapper.writeValueAsString(req)))
+                        .content(mapper.writeValueAsString(req)).with(csrf()))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.agentName", is("a")))
                 .andExpect(jsonPath("$.agentToken", is("rawtoken")));
     }
 
     @Test
+    @WithMockUser(roles = "AGENT")
     void heartbeatById_ReturnsOk() throws Exception {
         AgentDTO dto = new AgentDTO(1L,"a","1.1.1.1","RU",null, OffsetDateTime.now(), OffsetDateTime.now(), OffsetDateTime.now(), "ACTIVE");
         Mockito.when(agentService.updateHeartbeat(1L)).thenReturn(dto);
@@ -61,6 +65,7 @@ class AgentControllerTest {
     }
 
     @Test
+    @WithMockUser(roles = "AGENT")
     void heartbeatByName_ReturnsOk() throws Exception {
         AgentDTO dto = new AgentDTO(1L,"a","1.1.1.1","RU",null, OffsetDateTime.now(), OffsetDateTime.now(), OffsetDateTime.now(), "ACTIVE");
         Mockito.when(agentService.heartbeatByNameAndToken(eq("a"), eq("raw"))).thenReturn(dto);
@@ -72,6 +77,7 @@ class AgentControllerTest {
     }
 
     @Test
+    @WithMockUser(roles = "AGENT")
     void getById_ReturnsOk() throws Exception {
         AgentDTO dto = new AgentDTO(1L,"a","1.1.1.1","RU",null, OffsetDateTime.now(), null, null, "ACTIVE");
         Mockito.when(agentService.getAgent(1L)).thenReturn(dto);
@@ -81,6 +87,7 @@ class AgentControllerTest {
     }
 
     @Test
+    @WithMockUser(roles = "AGENT")
     void list_ReturnsPage() throws Exception {
         AgentDTO dto = new AgentDTO(1L,"a","1.1.1.1","RU",null, OffsetDateTime.now(), null, null, "ACTIVE");
         Mockito.when(agentService.listAgents(any())).thenReturn(new PageImpl<>(List.of(dto), PageRequest.of(0,10), 1));
@@ -91,6 +98,7 @@ class AgentControllerTest {
     }
 
     @Test
+    @WithMockUser(roles = "AGENT")
     void rotateToken_ReturnsNewToken() throws Exception {
         AgentDTO dto = new AgentDTO(1L,"a","1.1.1.1","RU","newtoken", OffsetDateTime.now(), null, null, "ACTIVE");
         Mockito.when(agentService.rotateToken(1L)).thenReturn(dto);
@@ -100,6 +108,7 @@ class AgentControllerTest {
     }
 
     @Test
+    @WithMockUser(roles = "AGENT")
     void delete_ReturnsNoContent() throws Exception {
         Mockito.doNothing().when(agentService).deleteAgent(1L);
         mockMvc.perform(delete("/api/agents/1"))
@@ -107,6 +116,7 @@ class AgentControllerTest {
     }
 
     @Test
+    @WithMockUser(roles = "AGENT")
     void validate_ReturnsBoolean() throws Exception {
         Mockito.when(agentService.validateToken("a","raw")).thenReturn(true);
         mockMvc.perform(get("/api/agents/validate")
