@@ -7,8 +7,10 @@ import aeza.hostmaster.checks.dto.AgentTaskMessage;
 import aeza.hostmaster.checks.dto.CheckJobResponse;
 import aeza.hostmaster.checks.dto.SiteCheckCreateRequest;
 import aeza.hostmaster.checks.dto.SiteCheckResult;
+import aeza.hostmaster.checks.web.CheckResultsWebSocketHandler;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.Map;
 import java.util.UUID;
@@ -35,6 +37,7 @@ public class KafkaSiteCheckService {
     private final ObjectMapper objectMapper;
     private final SiteCheckStorageService storageService;
     private final CheckJobService jobService;
+    private final CheckResultsWebSocketHandler checkResultsWebSocketHandler;
 
     private static final String AGENT_TASKS_TOPIC = "agent-tasks";
     private static final String AGENT_BROADCAST_TASKS_TOPIC = "agent-tasks-ping";
@@ -44,11 +47,13 @@ public class KafkaSiteCheckService {
     public KafkaSiteCheckService(KafkaTemplate<String, String> kafkaTemplate,
                                  ObjectMapper objectMapper,
                                  SiteCheckStorageService storageService,
-                                 CheckJobService jobService) {
+                                 CheckJobService jobService,
+                                 CheckResultsWebSocketHandler checkResultsWebSocketHandler) {
         this.kafkaTemplate = kafkaTemplate;
         this.objectMapper = objectMapper;
         this.storageService = storageService;
         this.jobService = jobService;
+        this.checkResultsWebSocketHandler = checkResultsWebSocketHandler;
     }
 
     public CheckJobResponse createSiteCheckJob(SiteCheckCreateRequest request) {
@@ -85,19 +90,33 @@ public class KafkaSiteCheckService {
             autoStartup = "${app.kafka.agent-listeners-enabled:false}"
     )
     public void handleSiteCheckResult(ConsumerRecord<String, String> record) {
-        if (tryProcessAggregatedResult(record)) {
+        JsonNode payload;
+        try {
+            payload = objectMapper.readTree(record.value());
+        } catch (JsonProcessingException ex) {
+            log.error("Failed to parse check result message for key {}: {}", record.key(), ex.getOriginalMessage());
+            handleInvalidMessage(record.key());
             return;
         }
 
-        try {
-            AgentCheckResult agentResult = objectMapper.readValue(record.value(), AgentCheckResult.class);
-            processAgentCheckResult(agentResult);
-        } catch (JsonProcessingException e) {
-            log.error("Failed to parse agent check result for key {}: {}", record.key(), e.getMessage());
+        UUID jobId = resolveJobId(record.key(), payload);
+        if (jobId != null) {
+            Object payloadForClient = extractPayloadForClient(payload);
+            checkResultsWebSocketHandler.sendResult(jobId, payloadForClient);
+        } else {
+            log.debug("Unable to resolve job id for check result message with key {}", record.key());
+        }
+
+        if (tryProcessAggregatedResult(payload)) {
+            return;
+        }
+
+        if (payload.isObject() && payload.hasNonNull("status")) {
             try {
-                jobService.updateJobStatus(UUID.fromString(record.key()), CheckStatus.FAILED);
-            } catch (IllegalArgumentException ex) {
-                log.error("Unable to update job status for malformed key {}", record.key());
+                AgentCheckResult agentResult = objectMapper.treeToValue(payload, AgentCheckResult.class);
+                processAgentCheckResult(agentResult);
+            } catch (JsonProcessingException ex) {
+                log.warn("Failed to map agent check result for key {}: {}", record.key(), ex.getOriginalMessage());
             }
         }
     }
@@ -241,20 +260,117 @@ public class KafkaSiteCheckService {
         };
     }
 
-    private boolean tryProcessAggregatedResult(ConsumerRecord<String, String> record) {
+    private boolean tryProcessAggregatedResult(JsonNode payload) {
         try {
-            SiteCheckResult result = objectMapper.readValue(record.value(), SiteCheckResult.class);
-            if (result.response() == null) {
-                log.debug("Aggregated result missing payload for job {}", result.taskId());
+            SiteCheckResult result = objectMapper.treeToValue(payload, SiteCheckResult.class);
+            if (result.taskId() == null || result.response() == null) {
+                log.debug("Aggregated result missing required fields");
                 return false;
             }
 
             storageService.saveSiteCheck(result.response());
             jobService.completeJob(result.taskId(), result.response());
+            checkResultsWebSocketHandler.completeJob(result.taskId());
             return true;
         } catch (JsonProcessingException ex) {
             log.debug("Message is not an aggregated site check result: {}", ex.getOriginalMessage());
             return false;
+        }
+    }
+
+    private UUID resolveJobId(String key, JsonNode payload) {
+        if (key != null && !key.isBlank()) {
+            try {
+                return UUID.fromString(key);
+            } catch (IllegalArgumentException ignored) {
+                // try to extract from payload
+            }
+        }
+
+        if (payload != null && payload.isObject()) {
+            JsonNode idNode = payload.has("taskId") ? payload.get("taskId") : payload.get("task_id");
+            if (idNode != null && !idNode.isNull()) {
+                try {
+                    return UUID.fromString(idNode.asText());
+                } catch (IllegalArgumentException ignored) {
+                    log.debug("Payload contains invalid task id: {}", idNode.asText());
+                }
+            }
+        }
+
+        return null;
+    }
+
+    private Object extractPayloadForClient(JsonNode payload) {
+        if (payload == null) {
+            return null;
+        }
+
+        JsonNode data = null;
+        String type = null;
+
+        if (payload.isObject()) {
+            JsonNode typeNode = payload.get("type");
+            if (typeNode != null && !typeNode.isNull()) {
+                type = typeNode.asText();
+            }
+
+            JsonNode responseNode = payload.get("response");
+            if (responseNode != null && !responseNode.isNull()) {
+                data = responseNode;
+            }
+
+            if (data == null) {
+                for (String candidate : List.of("http", "ping", "dns", "tcp", "traceroute")) {
+                    JsonNode candidateNode = payload.get(candidate);
+                    if (candidateNode != null && !candidateNode.isNull()) {
+                        data = candidateNode;
+                        if (type == null) {
+                            type = candidate;
+                        }
+                        break;
+                    }
+                }
+            }
+
+            if (data == null) {
+                JsonNode resultNode = payload.get("result");
+                if (resultNode != null && !resultNode.isNull()) {
+                    data = resultNode;
+                }
+            }
+
+            if (type == null) {
+                JsonNode checkType = payload.get("check_type");
+                if (checkType != null && !checkType.isNull()) {
+                    type = checkType.asText();
+                }
+            }
+        }
+
+        if (data == null) {
+            data = payload;
+        }
+
+        if (type == null) {
+            return data;
+        }
+
+        ObjectNode result = objectMapper.createObjectNode();
+        result.put("type", type);
+        result.set("data", data);
+        return result;
+    }
+
+    private void handleInvalidMessage(String key) {
+        if (key == null || key.isBlank()) {
+            return;
+        }
+
+        try {
+            jobService.updateJobStatus(UUID.fromString(key), CheckStatus.FAILED);
+        } catch (IllegalArgumentException ex) {
+            log.error("Unable to update job status for malformed key {}", key);
         }
     }
 
