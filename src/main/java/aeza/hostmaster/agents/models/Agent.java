@@ -47,12 +47,6 @@ public class Agent implements UserDetails {
     @Enumerated(EnumType.STRING)
     private Status status = Status.ACTIVE;
 
-    @CreatedDate
-    @Column(nullable = false, updatable = false)
-    private OffsetDateTime createdAt;
-
-    @LastModifiedDate
-    private OffsetDateTime updatedAt;
 
     /**
      * Last time the agent reported a heartbeat (used to see online/offline)
