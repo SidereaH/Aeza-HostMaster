@@ -7,6 +7,8 @@ import lombok.NoArgsConstructor;
 
 @Data
 @Schema(description = "Запрос на регистрацию агента")
+@AllArgsConstructor
+@NoArgsConstructor
 public class AgentRegistrationRequest {
 
     @Schema(description = "Имя агента", example = "europe-agent-01", required = true)

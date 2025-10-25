@@ -8,6 +8,8 @@ import java.time.OffsetDateTime;
 
 @Data
 @Schema(description = "DTO агента")
+@AllArgsConstructor
+@NoArgsConstructor
 public class AgentDTO {
 
     @Schema(description = "ID агента", example = "1")
