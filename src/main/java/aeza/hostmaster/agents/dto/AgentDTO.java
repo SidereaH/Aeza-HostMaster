@@ -1,6 +1,7 @@
 package aeza.hostmaster.agents.dto;
 
 
+import com.fasterxml.jackson.annotation.JsonInclude;
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.*;
 
@@ -10,6 +11,7 @@ import java.time.OffsetDateTime;
 @Schema(description = "DTO агента")
 @AllArgsConstructor
 @NoArgsConstructor
+@JsonInclude(JsonInclude.Include.NON_NULL)
 public class AgentDTO {
 
     @Schema(description = "ID агента", example = "1")

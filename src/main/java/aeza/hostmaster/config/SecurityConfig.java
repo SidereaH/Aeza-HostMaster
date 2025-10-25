@@ -11,6 +11,7 @@ import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.core.userdetails.User;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UserDetailsService;
@@ -26,6 +27,7 @@ public class SecurityConfig {
     public SecurityConfig(@Lazy AgentService agentService) {
         this.agentService = agentService;
     }
+
     private final AgentService agentService;
     @Bean
     public PasswordEncoder passwordEncoder() {
@@ -33,18 +35,18 @@ public class SecurityConfig {
     }
 
     @Bean
-    public UserDetailsService userDetailsService(PasswordEncoder passwordEncoder) {
-        UserDetails agentUser = User.builder()
+    public UserDetailsService adminUserDetailsService(PasswordEncoder passwordEncoder) {
+        UserDetails adminUser = User.builder()
                 .username("admin")
                 .password(passwordEncoder.encode("admin"))
-                .roles("AGENT")
+                .roles("ADMIN")
                 .build();
 
-        return new InMemoryUserDetailsManager(agentUser);
+        return new InMemoryUserDetailsManager(adminUser);
     }
 
     @Bean
-    public DaoAuthenticationProvider daoAuthenticationProvider(PasswordEncoder passwordEncoder) {
+    public DaoAuthenticationProvider agentAuthenticationProvider(PasswordEncoder passwordEncoder) {
         DaoAuthenticationProvider provider = new DaoAuthenticationProvider();
         provider.setUserDetailsService(agentService);
         provider.setPasswordEncoder(passwordEncoder);
@@ -57,26 +59,27 @@ public class SecurityConfig {
     public AuthenticationManager authenticationManager(AuthenticationConfiguration authConfig) throws Exception {
         return authConfig.getAuthenticationManager();
     }
-
     @Bean
-    public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
+    public SecurityFilterChain filterChain(HttpSecurity http,
+                                           UserDetailsService adminUserDetailsService,
+                                           DaoAuthenticationProvider agentAuthenticationProvider) throws Exception {
         http
                 .csrf(csrf -> csrf.disable())
                 .authorizeHttpRequests(auth -> auth
-//                        .requestMatchers("/api/agents/register").permitAll()
-//                        .requestMatchers("/api/agents/**").hasRole("AGENT")
-//                        .requestMatchers(
-//                                "/api/agents/register",
-//                                "/api/docs/**",
-//                                "/swagger-ui/**",
-//                                "/v3/api-docs/**",
-//                                "/swagger-resources/**",
-//                                "/webjars/**"
-//                        ).permitAll()
-                        .anyRequest().permitAll()
+                        .requestMatchers(
+                                "/api/agents/register",
+                                "/api/docs/**",
+                                "/swagger-ui/**",
+                                "/v3/api-docs/**",
+                                "/swagger-resources/**",
+                                "/webjars/**"
+                        ).permitAll()
+                        .anyRequest().authenticated()
                 )
+                .userDetailsService(adminUserDetailsService)
                 .httpBasic(Customizer.withDefaults())
-                .sessionManagement(session -> session.disable());
+                .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+                .authenticationProvider(agentAuthenticationProvider);
 
         return http.build();
     }

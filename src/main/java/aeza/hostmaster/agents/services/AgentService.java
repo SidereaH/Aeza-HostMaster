@@ -50,7 +50,7 @@ public class AgentService implements UserDetailsService {
         a.setAgentToken(hashed); // хеш в БД
         a = agentRepo.save(a);
 
-        AgentDTO dto = toDto(a, false);
+        AgentDTO dto = toDto(a);
         dto.setAgentToken(rawToken); // возвращаем raw token клиенту только один раз (регистрация)
         return dto;
     }
@@ -64,7 +64,7 @@ public class AgentService implements UserDetailsService {
         agent.setAgentToken(newHashed);
         agentRepo.save(agent);
 
-        AgentDTO dto = toDto(agent, true);
+        AgentDTO dto = toDto(agent);
         dto.setAgentToken(newRaw); // вернуть новый raw токен (один раз)
         return dto;
     }
@@ -77,22 +77,6 @@ public class AgentService implements UserDetailsService {
                 .orElse(false);
     }
 
-    // Heartbeat по имени+token (пример защищённого эндпоинта)
-    public AgentDTO heartbeatByNameAndToken(String agentName, String rawToken) {
-        Agent agent = agentRepo.findByAgentName(agentName)
-                .orElseThrow(() -> new AgentNotFoundException("Agent not found: " + agentName));
-
-        if (!passwordEncoder.matches(rawToken, agent.getAgentToken())) {
-            throw new BadCredentialsException("Invalid token for agent: " + agentName);
-        }
-
-        agent.setLastHeartbeat(OffsetDateTime.now());
-        agentRepo.save(agent);
-        return toDto(agent, false);
-    }
-
-
-
 
     /**
      * Обновление heartbeat от агента (например, при /agents/{id}/heartbeat).
@@ -102,8 +86,20 @@ public class AgentService implements UserDetailsService {
         Agent agent = agentRepo.findById(agentId).orElseThrow(() -> new AgentNotFoundException("Agent not found: " + agentId));
         agent.setLastHeartbeat(OffsetDateTime.now());
         agentRepo.save(agent);
-        return toDto(agent, false);
+        return toDto(agent);
     }
+
+    /**
+     * Обновление heartbeat для текущего аутентифицированного агента.
+     */
+    public AgentDTO heartbeatAuthenticated(String agentName) {
+        Agent agent = agentRepo.findByAgentName(agentName)
+                .orElseThrow(() -> new AgentNotFoundException("Agent not found: " + agentName));
+        agent.setLastHeartbeat(OffsetDateTime.now());
+        agentRepo.save(agent);
+        return toDto(agent);
+    }
+
 
     /**
      * Обновление heartbeat по токену (полезно, если агент не знает свой id)
@@ -118,13 +114,14 @@ public class AgentService implements UserDetailsService {
     /** Найти агента по id */
     @Transactional(readOnly = true)
     public AgentDTO getAgent(Long id) {
-        return agentRepo.findById(id).map(a -> toDto(a, false)).orElseThrow(() -> new AgentNotFoundException("Agent not found: " + id));
+        return agentRepo.findById(id).map(this::toDto).orElseThrow(() -> new AgentNotFoundException("Agent not found: " + id));
+
     }
 
     /** Найти агента по имени */
     @Transactional(readOnly = true)
     public AgentDTO getAgentByName(String name) {
-        return agentRepo.findByAgentName(name).map(a -> toDto(a, false)).orElseThrow(() -> new AgentNotFoundException("Agent not found by name: " + name));
+        return agentRepo.findByAgentName(name).map(this::toDto).orElseThrow(() -> new AgentNotFoundException("Agent not found by name: " + name));
     }
 
     /** Найти по токену (например при авторизации агента) */
@@ -146,12 +143,12 @@ public class AgentService implements UserDetailsService {
     /** Список агентов с пейджингом */
     @Transactional(readOnly = true)
     public Page<AgentDTO> listAgents(Pageable pageable) {
-        return agentRepo.findAll(pageable).map(a -> toDto(a, false));
+        return agentRepo.findAll(pageable).map(this::toDto);
     }
 
 
-    /** Преобразование entity -> dto. showToken = true когда нужно вернуть token (регистрация/ротация) */
-    private AgentDTO toDto(Agent agent, boolean showToken) {
+        /** Преобразование entity -> dto. Токен никогда не включается в DTO. */
+    private AgentDTO toDto(Agent agent) {
         AgentDTO dto = new AgentDTO();
         dto.setId(agent.getId());
         dto.setAgentName(agent.getAgentName());
@@ -159,11 +156,7 @@ public class AgentService implements UserDetailsService {
         dto.setCountry(agent.getAgentCountry());
         dto.setLastHeartbeat(agent.getLastHeartbeat());
         dto.setStatus(agent.getStatus().name());
-        if (showToken) {
-            dto.setAgentToken(agent.getAgentToken());
-        } else {
-            dto.setAgentToken(null);
-        }
+        dto.setAgentToken(null);
         return dto;
     }
 
@@ -175,8 +168,8 @@ public class AgentService implements UserDetailsService {
     // --- Spring Security integration ---
     @Override
     @Transactional(readOnly = true)
-    public UserDetails loadUserByUsername(String username) throws org.springframework.security.core.userdetails.UsernameNotFoundException {
+    public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException {
         return agentRepo.findByAgentName(username)
-                .orElseThrow(() -> new org.springframework.security.core.userdetails.UsernameNotFoundException("Agent not found: " + username));
+                .orElseThrow(() -> new UsernameNotFoundException("Agent not found: " + username));
     }
 }

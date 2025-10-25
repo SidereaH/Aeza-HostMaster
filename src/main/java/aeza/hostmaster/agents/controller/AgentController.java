@@ -2,6 +2,7 @@ package aeza.hostmaster.agents.controller;
 
 import aeza.hostmaster.agents.dto.AgentDTO;
 import aeza.hostmaster.agents.dto.AgentRegistrationRequest;
+import aeza.hostmaster.agents.models.Agent;
 import aeza.hostmaster.agents.services.AgentService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -16,6 +17,10 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
@@ -55,6 +60,7 @@ public class AgentController {
             @ApiResponse(responseCode = "404", description = "Агент не найден"),
             @ApiResponse(responseCode = "403", description = "Доступ запрещен")
     })
+    @PreAuthorize("hasRole('ADMIN')")
     @PostMapping("/{id}/heartbeat")
     public ResponseEntity<AgentDTO> heartbeat(
             @Parameter(description = "ID агента") @PathVariable Long id) {
@@ -64,17 +70,19 @@ public class AgentController {
 
     @Operation(
             summary = "Обновление heartbeat по имени и токену",
-            description = "Обновляет время последней активности агента по имени и токену"
+            description = "Обновляет время последней активности аутентифицированного агента",
+            security = @SecurityRequirement(name = "basicAuth")
     )
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Heartbeat обновлен"),
-            @ApiResponse(responseCode = "401", description = "Неверные учетные данные")
+            @ApiResponse(responseCode = "401", description = "Неверные учетные данные"),
+            @ApiResponse(responseCode = "401", description = "Неверные учетные данные"),
+            @ApiResponse(responseCode = "403", description = "Доступ запрещен")
     })
     @PostMapping("/heartbeat")
-    public ResponseEntity<AgentDTO> heartbeatByName(
-            @Parameter(description = "Имя агента") @RequestParam String agentName,
-            @Parameter(description = "Токен агента") @RequestParam String token) {
-        AgentDTO dto = agentService.heartbeatByNameAndToken(agentName, token);
+    @PreAuthorize("hasRole('AGENT')")
+    public ResponseEntity<AgentDTO> heartbeatByName(@AuthenticationPrincipal Agent authenticatedAgent) {
+        AgentDTO dto = agentService.heartbeatAuthenticated(authenticatedAgent.getAgentName());
         return ResponseEntity.ok(dto);
     }
 
@@ -88,8 +96,13 @@ public class AgentController {
             @ApiResponse(responseCode = "404", description = "Агент не найден")
     })
     @GetMapping("/{id}")
+    @PreAuthorize("hasAnyRole('ADMIN','AGENT')")
     public ResponseEntity<AgentDTO> get(
-            @Parameter(description = "ID агента") @PathVariable Long id) {
+            @Parameter(description = "ID агента") @PathVariable Long id,
+            @AuthenticationPrincipal UserDetails principal) {
+        if (principal instanceof Agent agent && !agent.getId().equals(id)) {
+            throw new AccessDeniedException("Agents may only access their own profile");
+        }
         return ResponseEntity.ok(agentService.getAgent(id));
     }
 
@@ -130,8 +143,13 @@ public class AgentController {
             @ApiResponse(responseCode = "404", description = "Агент не найден")
     })
     @PostMapping("/{id}/rotate-token")
+    @PreAuthorize("hasAnyRole('ADMIN','AGENT')")
     public ResponseEntity<AgentDTO> rotateToken(
-            @Parameter(description = "ID агента") @PathVariable Long id) {
+            @Parameter(description = "ID агента") @PathVariable Long id,
+            @AuthenticationPrincipal UserDetails principal) {
+        if (principal instanceof Agent agent && !agent.getId().equals(id)) {
+            throw new AccessDeniedException("Agents may only rotate their own token");
+        }
         return ResponseEntity.ok(agentService.rotateToken(id));
     }
 
@@ -145,6 +163,7 @@ public class AgentController {
             @ApiResponse(responseCode = "404", description = "Агент не найден")
     })
     @DeleteMapping("/{id}")
+    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<Void> delete(
             @Parameter(description = "ID агента") @PathVariable Long id) {
         agentService.deleteAgent(id);
@@ -160,6 +179,7 @@ public class AgentController {
                     content = @Content(schema = @Schema(type = "boolean"))),
     })
     @GetMapping("/validate")
+    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<Boolean> validate(
             @Parameter(description = "Имя агента") @RequestParam String agentName,
             @Parameter(description = "Токен для проверки") @RequestParam String token) {
