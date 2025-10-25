@@ -157,8 +157,6 @@ public class AgentService implements UserDetailsService {
         dto.setAgentName(agent.getAgentName());
         dto.setIpAddress(agent.getIpAddress());
         dto.setCountry(agent.getAgentCountry());
-        dto.setCreatedAt(agent.getCreatedAt());
-        dto.setUpdatedAt(agent.getUpdatedAt());
         dto.setLastHeartbeat(agent.getLastHeartbeat());
         dto.setStatus(agent.getStatus().name());
         if (showToken) {

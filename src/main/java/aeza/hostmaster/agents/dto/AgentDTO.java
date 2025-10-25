@@ -28,11 +28,6 @@ public class AgentDTO {
             example = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...")
     private String agentToken;
 
-    @Schema(description = "Время создания агента")
-    private OffsetDateTime createdAt;
-
-    @Schema(description = "Время последнего обновления")
-    private OffsetDateTime updatedAt;
 
     @Schema(description = "Время последнего heartbeat")
     private OffsetDateTime lastHeartbeat;
