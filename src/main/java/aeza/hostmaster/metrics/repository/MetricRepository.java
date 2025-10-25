@@ -1,10 +1,8 @@
-package aeza.hostmaster.repository;
+package aeza.hostmaster.metrics.repository;
 
-import aeza.hostmaster.models.Metric;
+import aeza.hostmaster.metrics.models.Metric;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
-
-import java.util.Optional;
 
 @Repository
 public interface MetricRepository extends JpaRepository<Metric, Long> {

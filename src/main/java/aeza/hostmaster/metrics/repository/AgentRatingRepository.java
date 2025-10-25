@@ -1,13 +1,12 @@
-package aeza.hostmaster.repository;
+package aeza.hostmaster.metrics.repository;
 
-import aeza.hostmaster.dto.AgentDTO;
-import aeza.hostmaster.models.AgentRating;
+import aeza.hostmaster.metrics.models.AgentRating;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
 import java.util.Optional;
 
 @Repository
-public interface AgentRepository extends JpaRepository<AgentRating, Long> {
+public interface AgentRatingRepository extends JpaRepository<AgentRating, Long> {
     Optional<AgentRating> findByAgentId(Long agentId);
 }

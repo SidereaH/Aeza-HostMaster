@@ -1,8 +1,9 @@
-package aeza.hostmaster.dto;
+package aeza.hostmaster.metrics.dto;
 
-import aeza.hostmaster.models.Metric;
+import aeza.hostmaster.metrics.models.Metric;
 import lombok.Data;
 
+import java.time.Instant;
 import java.time.LocalDateTime;
 
 @Data
@@ -11,15 +12,14 @@ public class MetricDTO {
     private String agentName;
     private Metric.MetricType metricType;
     private double value;
-    private LocalDateTime timestamp;
+    private Instant timestamp;
 
     public Metric toMetric(){
         Metric m = new Metric();
-        m.setAgentId(agentId);
         m.setAgentName(agentName);
         m.setMetricType(metricType);
         m.setValue(value);
-        m.setTimestamp(timestamp);
+//        m.setTimestamp(timestamp);
         return m;
     }
 }

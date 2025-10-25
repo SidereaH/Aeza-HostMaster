@@ -1,10 +1,9 @@
-package aeza.hostmaster.dto;
+package aeza.hostmaster.metrics.dto;
 
 import lombok.Data;
 
 @Data
-public class AgentDTO {
-    private Long agentId;
+public class AgentRatingDTO {
     private String agentName;
     private double averageLatency;
     private double averageAvailability;
