@@ -23,7 +23,6 @@ services:
     image: aeza-hostmaster:latest
     depends_on:
       - postgres
-      - kafka
     env_file:
       - .env
     environment:
