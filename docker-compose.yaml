@@ -23,6 +23,9 @@ services:
     image: aeza-hostmaster:latest
     depends_on:
       - postgres
+      - kafka
+    env_file:
+      - .env
     environment:
       SPRING_DATASOURCE_URL: ${SPRING_DATASOURCE_URL:-jdbc:postgresql://postgres:5432/${POSTGRES_DB:-homerep_userservice}}
       SPRING_DATASOURCE_USERNAME: ${SPRING_DATASOURCE_USERNAME:-${POSTGRES_USER:-postgres}}
@@ -36,3 +39,5 @@ services:
       SPRING_SECURITY_USER_NAME: ${APP_USER:-admin}
       SPRING_SECURITY_USER_PASSWORD: ${APP_PASSWORD:-admin}
       SPRING_SECURITY_USER_ROLE: ${APP_ROLE:-AGENT}
+    ports:
+      - "8080:8080"
