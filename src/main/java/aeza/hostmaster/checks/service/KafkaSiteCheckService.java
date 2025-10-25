@@ -147,7 +147,9 @@ public class KafkaSiteCheckService {
     private void sendTaskMessage(CheckType checkType, UUID jobId, String payload) {
         String topic = resolveTopic(checkType);
         try {
-            kafkaTemplate.send(topic, jobId.toString(), payload).get(5, TimeUnit.SECONDS);
+            var result = kafkaTemplate.send(topic, jobId.toString(), payload).get(5, TimeUnit.SECONDS);
+            var md = result.getRecordMetadata();
+            log.info("Sent to topic={} partition={} offset={} key={}", md.topic(), md.partition(), md.offset(), jobId);
         } catch (InterruptedException ex) {
             Thread.currentThread().interrupt();
             throw new RuntimeException("Interrupted while sending task message to Kafka", ex);
@@ -155,6 +157,7 @@ public class KafkaSiteCheckService {
             throw new RuntimeException("Failed to deliver task message to Kafka", ex);
         }
     }
+
 
     private String resolveTopic(CheckType checkType) {
         if (checkType == CheckType.PING) {
