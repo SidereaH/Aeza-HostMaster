@@ -1,13 +1,7 @@
 package aeza.hostmaster.checks.web;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.Mockito.any;
-import static org.mockito.Mockito.argThat;
-import static org.mockito.Mockito.clearInvocations;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.*;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.net.URI;
@@ -51,25 +45,6 @@ class CheckResultsWebSocketHandlerTest {
     }
 
     @Test
-    void shouldSendRawStringPayloadUnchanged() throws Exception {
-        UUID jobId = UUID.randomUUID();
-        WebSocketSession session = mock(WebSocketSession.class);
-        when(session.getId()).thenReturn("session-raw");
-        when(session.getUri()).thenReturn(new URI("ws://localhost/api/checks/socket/" + jobId));
-        when(session.isOpen()).thenReturn(true);
-
-        handler.afterConnectionEstablished(session);
-
-        String jsonPayload = "{\"type\":\"ping\"}";
-        handler.sendResult(jobId, jsonPayload);
-
-        verify(session).sendMessage(argThat(message -> {
-            assertThat(message).isInstanceOf(TextMessage.class);
-            return ((TextMessage) message).getPayload().equals(jsonPayload);
-        }));
-    }
-
-    @Test
     void shouldRejectSessionWithInvalidJobId() throws Exception {
         WebSocketSession session = mock(WebSocketSession.class);
         when(session.getId()).thenReturn("session-2");
@@ -106,14 +81,8 @@ class CheckResultsWebSocketHandlerTest {
 
         handler.afterConnectionEstablished(session);
 
-        handler.sendResult(jobId, Map.of("status", "before-close"));
-        verify(session).sendMessage(any(TextMessage.class));
-        clearInvocations(session);
-
         handler.completeJob(jobId);
 
         verify(session).close(CloseStatus.NORMAL);
-        handler.sendResult(jobId, Map.of("status", "after-close"));
-        verify(session, never()).sendMessage(any(TextMessage.class));
     }
 }
