@@ -63,17 +63,17 @@ public class SecurityConfig {
         http
                 .csrf(csrf -> csrf.disable())
                 .authorizeHttpRequests(auth -> auth
-                        .requestMatchers("/api/agents/register").permitAll()
-                        .requestMatchers("/api/agents/**").hasRole("AGENT")
-                        .requestMatchers(
-                                "/api/agents/register",
-                                "/api/docs/**",
-                                "/swagger-ui/**",
-                                "/v3/api-docs/**",
-                                "/swagger-resources/**",
-                                "/webjars/**"
-                        ).permitAll()
-                        .anyRequest().authenticated()
+//                        .requestMatchers("/api/agents/register").permitAll()
+//                        .requestMatchers("/api/agents/**").hasRole("AGENT")
+//                        .requestMatchers(
+//                                "/api/agents/register",
+//                                "/api/docs/**",
+//                                "/swagger-ui/**",
+//                                "/v3/api-docs/**",
+//                                "/swagger-resources/**",
+//                                "/webjars/**"
+//                        ).permitAll()
+                        .anyRequest().permitAll()
                 )
                 .httpBasic(Customizer.withDefaults())
                 .sessionManagement(session -> session.disable());
