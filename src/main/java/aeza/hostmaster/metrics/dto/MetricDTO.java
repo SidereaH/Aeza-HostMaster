@@ -8,7 +8,7 @@ import java.time.LocalDateTime;
 
 @Data
 public class MetricDTO {
-    private int agentId;
+    private Long agentId;
     private String agentName;
     private Metric.MetricType metricType;
     private double value;

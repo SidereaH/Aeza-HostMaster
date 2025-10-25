@@ -1,6 +1,7 @@
 package aeza.hostmaster.metrics.repository;
 
 import aeza.hostmaster.metrics.models.AgentRating;
+import aeza.hostmaster.metrics.models.Metric;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 

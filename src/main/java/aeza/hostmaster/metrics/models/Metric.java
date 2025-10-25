@@ -17,6 +17,8 @@ import java.time.LocalDateTime;
 @Entity
 @Data
 public class Metric {
+    public static Metric.MetricType MetricType;
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long metricId;
@@ -36,7 +38,7 @@ public class Metric {
     public enum MetricType {
         AGENT_AVAILABILITY,
         REQUEST_COUNT,
-        RESPONSE_COUNT
+        RESPONSE_DELAY
     }
 
     public MetricDTO toDTO() {

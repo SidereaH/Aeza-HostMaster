@@ -13,7 +13,7 @@ public class AgentRating {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     @Id
     private Long agentRatingId;
-    private int agentId; //id самого агента
+    private Long agentId; //id самого агента
     private String agentName;
     private double averageLatency;
     private double averageAvailability;
@@ -27,4 +27,6 @@ public class AgentRating {
         agentRatingDTO.setTotalRequestCount(this.totalRequestCount);
         return agentRatingDTO;
     }
+
+
 }
