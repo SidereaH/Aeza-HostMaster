@@ -15,6 +15,9 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    volumes:
+      # Именованный том для данных Postgres
+      - pg-data:/var/lib/postgresql/data
 
   app:
     build:
@@ -22,12 +25,13 @@ services:
       dockerfile: Dockerfile
     image: aeza-hostmaster:latest
     depends_on:
-      - postgres
+      postgres:
+        condition: service_healthy
     environment:
       SPRING_DATASOURCE_URL: ${SPRING_DATASOURCE_URL:-jdbc:postgresql://postgres:5432/${POSTGRES_DB:-homerep_userservice}}
       SPRING_DATASOURCE_USERNAME: ${SPRING_DATASOURCE_USERNAME:-${POSTGRES_USER:-postgres}}
       SPRING_DATASOURCE_PASSWORD: ${SPRING_DATASOURCE_PASSWORD:-${POSTGRES_PASSWORD:-postgres}}
-      SPRING_JPA_HIBERNATE_DDL_AUTO: ${SPRING_JPA_HIBERNATE_DDL_AUTO:-create-drop}
+      SPRING_JPA_HIBERNATE_DDL_AUTO: ${SPRING_JPA_HIBERNATE_DDL_AUTO:-update}
       HOMEREP_SECRET: ${HOMEREP_SECRET:?HOMEREP_SECRET is not set}
       HOMEREP_LIFETIME: ${HOMEREP_LIFETIME:-600000}
       SPRING_KAFKA_BOOTSTRAP_SERVERS: ${SPRING_KAFKA_BOOTSTRAP_SERVERS:-kafka:9092}
@@ -38,3 +42,6 @@ services:
       SPRING_SECURITY_USER_ROLE: ${APP_ROLE:-AGENT}
     ports:
       - "8080:8080"
+
+volumes:
+  pg-data:
