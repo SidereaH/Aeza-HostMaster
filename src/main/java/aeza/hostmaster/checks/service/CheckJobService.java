@@ -72,6 +72,15 @@ public class CheckJobService {
         });
     }
 
+    @Transactional(readOnly = true)
+    public void appendJobLog(UUID jobId, Object payload) {
+        CheckStatus status = siteCheckRepository.findById(jobId)
+                .map(SiteCheckEntity::getStatus)
+                .orElse(null);
+
+        sendWebSocketMessage(jobId, "JOB_LOG", status, payload);
+    }
+
     private void sendWebSocketMessage(UUID jobId, String type, CheckStatus status, Object data) {
         WebSocketMessage message = new WebSocketMessage(
                 type, jobId, status, Instant.now(), data
