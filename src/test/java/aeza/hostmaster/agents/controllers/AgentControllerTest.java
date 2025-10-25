@@ -43,7 +43,7 @@ class AgentControllerTest {
     @Test
     void register_ReturnsCreated() throws Exception {
         AgentRegistrationRequest req = new AgentRegistrationRequest("a","1.1.1.1","RU");
-        AgentDTO resp = new AgentDTO(1L,"a","1.1.1.1","RU","rawtoken", OffsetDateTime.now(), null, null, "ACTIVE");
+        AgentDTO resp = new AgentDTO(1L,"a","1.1.1.1","RU","rawtoken", null, "ACTIVE");
         Mockito.when(agentService.registerAgent(any())).thenReturn(resp);
 
         mockMvc.perform(post("/api/agents/register")
@@ -57,7 +57,7 @@ class AgentControllerTest {
     @Test
     @WithMockUser(roles = "AGENT")
     void heartbeatById_ReturnsOk() throws Exception {
-        AgentDTO dto = new AgentDTO(1L,"a","1.1.1.1","RU",null, OffsetDateTime.now(), OffsetDateTime.now(), OffsetDateTime.now(), "ACTIVE");
+        AgentDTO dto = new AgentDTO(1L,"a","1.1.1.1","RU","rawtoken", null, "ACTIVE");
         Mockito.when(agentService.updateHeartbeat(1L)).thenReturn(dto);
         mockMvc.perform(post("/api/agents/1/heartbeat"))
                 .andExpect(status().isOk())
@@ -67,7 +67,7 @@ class AgentControllerTest {
     @Test
     @WithMockUser(roles = "AGENT")
     void heartbeatByName_ReturnsOk() throws Exception {
-        AgentDTO dto = new AgentDTO(1L,"a","1.1.1.1","RU",null, OffsetDateTime.now(), OffsetDateTime.now(), OffsetDateTime.now(), "ACTIVE");
+        AgentDTO dto = new AgentDTO(1L,"a","1.1.1.1","RU","rawtoken", null, "ACTIVE");
         Mockito.when(agentService.heartbeatByNameAndToken(eq("a"), eq("raw"))).thenReturn(dto);
         mockMvc.perform(post("/api/agents/heartbeat")
                         .param("agentName","a")
@@ -79,7 +79,7 @@ class AgentControllerTest {
     @Test
     @WithMockUser(roles = "AGENT")
     void getById_ReturnsOk() throws Exception {
-        AgentDTO dto = new AgentDTO(1L,"a","1.1.1.1","RU",null, OffsetDateTime.now(), null, null, "ACTIVE");
+        AgentDTO dto = new AgentDTO(1L,"a","1.1.1.1","RU","rawtoken", null, "ACTIVE");
         Mockito.when(agentService.getAgent(1L)).thenReturn(dto);
         mockMvc.perform(get("/api/agents/1"))
                 .andExpect(status().isOk())
@@ -89,7 +89,7 @@ class AgentControllerTest {
     @Test
     @WithMockUser(roles = "AGENT")
     void list_ReturnsPage() throws Exception {
-        AgentDTO dto = new AgentDTO(1L,"a","1.1.1.1","RU",null, OffsetDateTime.now(), null, null, "ACTIVE");
+        AgentDTO dto = new AgentDTO(1L,"a","1.1.1.1","RU","rawtoken", null, "ACTIVE");
         Mockito.when(agentService.listAgents(any())).thenReturn(new PageImpl<>(List.of(dto), PageRequest.of(0,10), 1));
         mockMvc.perform(get("/api/agents"))
                 .andExpect(status().isOk())
@@ -100,7 +100,7 @@ class AgentControllerTest {
     @Test
     @WithMockUser(roles = "AGENT")
     void rotateToken_ReturnsNewToken() throws Exception {
-        AgentDTO dto = new AgentDTO(1L,"a","1.1.1.1","RU","newtoken", OffsetDateTime.now(), null, null, "ACTIVE");
+        AgentDTO dto = new AgentDTO(1L,"a","1.1.1.1","RU","rawtoken", null, "ACTIVE");
         Mockito.when(agentService.rotateToken(1L)).thenReturn(dto);
         mockMvc.perform(post("/api/agents/1/rotate-token"))
                 .andExpect(status().isOk())

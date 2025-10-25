@@ -55,7 +55,6 @@ class AgentServiceTest {
         sampleAgent.setIpAddress("10.0.0.1");
         sampleAgent.setAgentCountry("EE");
         sampleAgent.setAgentToken("$2a$10$hashplaceholder"); // hashed
-        sampleAgent.setCreatedAt(OffsetDateTime.now().minusDays(1));
     }
 
     @Test
