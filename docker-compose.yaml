@@ -33,6 +33,6 @@ services:
       SPRING_KAFKA_BOOTSTRAP_SERVERS: ${SPRING_KAFKA_BOOTSTRAP_SERVERS:-kafka:9092}
       SPRING_KAFKA_PRODUCER_KEY_SERIALIZER: org.apache.kafka.common.serialization.StringSerializer
       SPRING_KAFKA_PRODUCER_VALUE_SERIALIZER: org.apache.kafka.common.serialization.StringSerializer
-
-    ports:
-      - "8080:8080"
+      SPRING_SECURITY_USER_NAME: ${APP_USER:-admin}
+      SPRING_SECURITY_USER_PASSWORD: ${APP_PASSWORD:-admin}
+      SPRING_SECURITY_USER_ROLE: ${APP_ROLE:-AGENT}
