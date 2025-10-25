@@ -1,8 +1,7 @@
 package aeza.hostmaster.checks.service;
 
-import aeza.hostmaster.checks.domain.CheckStatus;
 import aeza.hostmaster.checks.dto.*;
-
+import aeza.hostmaster.checks.domain.CheckStatus;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
@@ -31,19 +30,22 @@ public class KafkaSiteCheckService {
         this.objectMapper = objectMapper;
         this.storageService = storageService;
         this.jobService = jobService;
-
-
-    }
-    public CheckJobResponse getJobStatus(UUID jobId) {
-        return jobService.getJobStatus(jobId);
     }
 
-    public CheckJobResponse createSiteCheckJob(String target) {
+    public CheckJobResponse createSiteCheckJob(SiteCheckCreateRequest request) {
         // Создаем job в БД
-        CheckJobResponse job = jobService.createJob(target);
+        CheckJobResponse job = jobService.createJob(request.target());
 
         // Отправляем задание в Kafka
-        SiteCheckTask task = new SiteCheckTask(job.jobId(), target, SITE_CHECK_RESULTS_TOPIC);
+        SiteCheckTask task = new SiteCheckTask(
+                job.jobId(),
+                request.target(),
+                SITE_CHECK_RESULTS_TOPIC,
+                request.checkTypes(),
+                request.tcpConfig(),
+                request.dnsConfig(),
+                request.tracerouteConfig()
+        );
 
         try {
             String taskJson = objectMapper.writeValueAsString(task);
@@ -60,7 +62,11 @@ public class KafkaSiteCheckService {
         return job;
     }
 
-    @KafkaListener(topics = SITE_CHECK_RESULTS_TOPIC)
+    public CheckJobResponse getJobStatus(UUID jobId) {
+        return jobService.getJobStatus(jobId);
+    }
+
+    @KafkaListener(topics = "checks-results")
     public void handleSiteCheckResult(ConsumerRecord<String, String> record) {
         try {
             SiteCheckResult result = objectMapper.readValue(record.value(), SiteCheckResult.class);

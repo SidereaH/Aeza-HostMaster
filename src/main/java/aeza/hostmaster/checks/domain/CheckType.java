@@ -1,12 +1,9 @@
 package aeza.hostmaster.checks.domain;
 
-/**
- * The type of monitoring check being executed for a site.
- */
 public enum CheckType {
-    HTTP,
-    PING,
-    TCP_CONNECT,
-    TRACEROUTE,
-    DNS_LOOKUP
+    HTTP,       // HTTP(S) GET проверка
+    PING,       // Ping проверка
+    TCP,        // TCP connect проверка (используйте TCP вместо TCP_CONNECT)
+    TRACEROUTE, // Traceroute с геопозицией
+    TCP_CONNECT, DNS_LOOKUP  // DNS lookup проверка
 }

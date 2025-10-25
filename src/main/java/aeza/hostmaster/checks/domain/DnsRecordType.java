@@ -8,5 +8,7 @@ public enum DnsRecordType {
     AAAA,
     MX,
     NS,
-    TXT
+    TXT,
+    CNAME, // Canonical name
+    SOA    // Start of authority
 }

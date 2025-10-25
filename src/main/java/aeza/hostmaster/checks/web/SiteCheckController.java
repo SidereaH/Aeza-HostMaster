@@ -22,7 +22,7 @@ public class SiteCheckController {
     public ResponseEntity<CheckJobResponse> createSiteCheck(
             @RequestBody SiteCheckCreateRequest request) {
 
-        CheckJobResponse job = kafkaSiteCheckService.createSiteCheckJob(request.target());
+        CheckJobResponse job = kafkaSiteCheckService.createSiteCheckJob(request); // Передаем весь request
         return ResponseEntity.accepted().body(job);
     }
 
