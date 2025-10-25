@@ -1,0 +1,36 @@
+stages:
+  - test
+  - build
+
+test:
+  stage: test
+  image: gradle:8.4-jdk21
+  services:
+    - name: docker:24.0-dind
+      command: ["--tls=false"]
+  variables:
+    DOCKER_HOST: "tcp://docker:2375"
+    DOCKER_TLS_CERTDIR: ""
+    GRADLE_USER_HOME: .gradle
+    TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE: "tcp://docker:2375"
+  script:
+    - gradle --no-daemon test
+  cache:
+    paths:
+      - .gradle
+  artifacts:
+    reports:
+      junit: build/test-results/test/**/*.xml
+
+build-compose:
+  stage: build
+  tags:
+    - aeza-runner
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+  before_script:
+    - docker info
+    - docker compose version
+  script:
+    - docker compose build --pull --no-cache
+    - docker compose up -d
