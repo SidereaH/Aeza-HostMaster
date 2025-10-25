@@ -15,6 +15,9 @@ import java.util.UUID;
 import java.time.Instant;
 import java.util.HashMap;
 import java.util.List;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.stream.Collectors;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.slf4j.Logger;
@@ -34,6 +37,7 @@ public class KafkaSiteCheckService {
     private final CheckJobService jobService;
 
     private static final String AGENT_TASKS_TOPIC = "agent-tasks";
+    private static final String AGENT_BROADCAST_TASKS_TOPIC = "agent-tasks-ping";
     private static final String CHECK_RESULTS_TOPIC = "check-results";
     private static final String AGENT_LOGS_TOPIC = "agent-logs";
 
@@ -60,7 +64,7 @@ public class KafkaSiteCheckService {
             for (CheckType checkType : checkTypes) {
                 AgentTaskMessage taskMessage = buildAgentTaskMessage(job, request, checkType, now);
                 String payload = objectMapper.writeValueAsString(taskMessage);
-                kafkaTemplate.send(AGENT_TASKS_TOPIC, job.jobId().toString(), payload);
+                sendTaskMessage(checkType, job.jobId(), payload);
             }
 
             jobService.updateJobStatus(job.jobId(), CheckStatus.IN_PROGRESS);
@@ -138,6 +142,26 @@ public class KafkaSiteCheckService {
                 Instant.now(),
                 resolveTimeout(checkType, request)
         );
+    }
+
+    private void sendTaskMessage(CheckType checkType, UUID jobId, String payload) {
+        String topic = resolveTopic(checkType);
+        try {
+            kafkaTemplate.send(topic, jobId.toString(), payload).get(5, TimeUnit.SECONDS);
+        } catch (InterruptedException ex) {
+            Thread.currentThread().interrupt();
+            throw new RuntimeException("Interrupted while sending task message to Kafka", ex);
+        } catch (ExecutionException | TimeoutException ex) {
+            throw new RuntimeException("Failed to deliver task message to Kafka", ex);
+        }
+    }
+
+    private String resolveTopic(CheckType checkType) {
+        if (checkType == CheckType.PING) {
+            return AGENT_BROADCAST_TASKS_TOPIC;
+        }
+
+        return AGENT_TASKS_TOPIC;
     }
 
     private Map<String, Object> buildParameters(CheckType checkType, SiteCheckCreateRequest request) {
