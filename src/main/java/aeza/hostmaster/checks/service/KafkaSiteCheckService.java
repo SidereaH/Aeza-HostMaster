@@ -35,12 +35,7 @@ public class KafkaSiteCheckService {
 
     private static final String AGENT_TASKS_TOPIC = "agent-tasks";
     private static final String CHECK_RESULTS_TOPIC = "check-results";
-    private static final String LEGACY_CHECK_RESULTS_TOPIC = "checks-results";
     private static final String AGENT_LOGS_TOPIC = "agent-logs";
-
-    private static final String CHECK_RESULTS_GROUP_ID = "hostmaster-check-results";
-    private static final String LEGACY_CHECK_RESULTS_GROUP_ID = "hostmaster-legacy-results";
-    private static final String AGENT_LOGS_GROUP_ID = "hostmaster-agent-logs";
 
     public KafkaSiteCheckService(KafkaTemplate<String, String> kafkaTemplate,
                                  ObjectMapper objectMapper,
@@ -59,12 +54,11 @@ public class KafkaSiteCheckService {
                 ? List.of(CheckType.HTTP)
                 : request.checkTypes();
 
-        Instant createdAt = job.executedAt() != null ? job.executedAt() : Instant.now();
-        Instant scheduledAt = createdAt;
+        Instant now = Instant.now();
 
         try {
             for (CheckType checkType : checkTypes) {
-                AgentTaskMessage taskMessage = buildAgentTaskMessage(job, request, checkType, scheduledAt, createdAt);
+                AgentTaskMessage taskMessage = buildAgentTaskMessage(job, request, checkType, now);
                 String payload = objectMapper.writeValueAsString(taskMessage);
                 kafkaTemplate.send(AGENT_TASKS_TOPIC, job.jobId().toString(), payload);
             }
@@ -82,8 +76,12 @@ public class KafkaSiteCheckService {
         return jobService.getJobStatus(jobId);
     }
 
-    @KafkaListener(topics = CHECK_RESULTS_TOPIC, groupId = CHECK_RESULTS_GROUP_ID)
-    public void handleAgentCheckResult(ConsumerRecord<String, String> record) {
+    @KafkaListener(topics = CHECK_RESULTS_TOPIC)
+    public void handleSiteCheckResult(ConsumerRecord<String, String> record) {
+        if (tryProcessAggregatedResult(record)) {
+            return;
+        }
+
         try {
             AgentCheckResult agentResult = objectMapper.readValue(record.value(), AgentCheckResult.class);
             processAgentCheckResult(agentResult);
@@ -97,23 +95,7 @@ public class KafkaSiteCheckService {
         }
     }
 
-    @KafkaListener(topics = LEGACY_CHECK_RESULTS_TOPIC, groupId = LEGACY_CHECK_RESULTS_GROUP_ID)
-    public void handleAggregatedSiteCheckResult(ConsumerRecord<String, String> record) {
-        try {
-            SiteCheckResult result = objectMapper.readValue(record.value(), SiteCheckResult.class);
-            if (result.response() == null) {
-                log.debug("Aggregated result missing payload for job {}", result.taskId());
-                return;
-            }
-
-            storageService.saveSiteCheck(result.response());
-            jobService.completeJob(result.taskId(), result.response());
-        } catch (JsonProcessingException ex) {
-            log.debug("Failed to parse aggregated site check result for key {}: {}", record.key(), ex.getOriginalMessage());
-        }
-    }
-
-    @KafkaListener(topics = AGENT_LOGS_TOPIC, groupId = AGENT_LOGS_GROUP_ID)
+    @KafkaListener(topics = AGENT_LOGS_TOPIC)
     public void handleAgentLog(ConsumerRecord<String, String> record) {
         UUID jobId;
         try {
@@ -138,8 +120,7 @@ public class KafkaSiteCheckService {
     private AgentTaskMessage buildAgentTaskMessage(CheckJobResponse job,
                                                   SiteCheckCreateRequest request,
                                                   CheckType checkType,
-                                                  Instant scheduledAt,
-                                                  Instant createdAt) {
+                                                  Instant scheduledAt) {
         Map<String, Object> parameters = buildParameters(checkType, request);
 
         return new AgentTaskMessage(
@@ -148,7 +129,7 @@ public class KafkaSiteCheckService {
                 request.target(),
                 parameters,
                 scheduledAt,
-                createdAt,
+                Instant.now(),
                 resolveTimeout(checkType, request)
         );
     }
@@ -225,6 +206,23 @@ public class KafkaSiteCheckService {
                     ? Math.toIntExact(Math.max(1, request.tracerouteConfig().timeoutMillis() / 1000))
                     : 30;
         };
+    }
+
+    private boolean tryProcessAggregatedResult(ConsumerRecord<String, String> record) {
+        try {
+            SiteCheckResult result = objectMapper.readValue(record.value(), SiteCheckResult.class);
+            if (result.response() == null) {
+                log.debug("Aggregated result missing payload for job {}", result.taskId());
+                return false;
+            }
+
+            storageService.saveSiteCheck(result.response());
+            jobService.completeJob(result.taskId(), result.response());
+            return true;
+        } catch (JsonProcessingException ex) {
+            log.debug("Message is not an aggregated site check result: {}", ex.getOriginalMessage());
+            return false;
+        }
     }
 
     private void processAgentCheckResult(AgentCheckResult result) {
