@@ -10,8 +10,7 @@ import reactor.core.publisher.Mono;
 
 import java.time.Duration;
 import java.time.Instant;
-import java.util.List;
-import java.util.UUID;
+import java.util.*;
 
 @Service
 public class SiteCheckService {
@@ -19,21 +18,17 @@ public class SiteCheckService {
     private final WebClient webClient;
 
     public SiteCheckService(WebClient.Builder webClientBuilder) {
-        this.webClient = webClientBuilder
-                .baseUrl("")
-                .build();
+        this.webClient = webClientBuilder.build();
     }
 
     public SiteCheckResponse performSiteCheck(SiteCheckCreateRequest request) {
         Instant startTime = Instant.now();
 
         try {
-            // Выполняем реальный HTTP запрос
             var httpResult = performHttpCheck(request.target());
             Instant endTime = Instant.now();
             long totalDuration = Duration.between(startTime, endTime).toMillis();
 
-            // Создаем ответ с реальными данными проверки
             return new SiteCheckResponse(
                     UUID.randomUUID(),
                     request.target(),
@@ -47,12 +42,11 @@ public class SiteCheckService {
             Instant endTime = Instant.now();
             long totalDuration = Duration.between(startTime, endTime).toMillis();
 
-            // Создаем ответ с ошибкой
             return new SiteCheckResponse(
                     UUID.randomUUID(),
                     request.target(),
                     Instant.now(),
-                    CheckStatus.FAIL,
+                    CheckStatus.FAILED, // Используем FAILED вместо FAIL
                     totalDuration,
                     List.of(createErrorCheckExecution(e.getMessage(), totalDuration))
             );
@@ -73,12 +67,12 @@ public class SiteCheckService {
             long duration = Duration.between(startTime, endTime).toMillis();
 
             HttpStatus status = (HttpStatus) response.getStatusCode();
-            boolean isSuccess = status.is2xxSuccessful() || status.is3xxRedirection();
+            boolean isSuccess = status.is2xxSuccessful();
 
             return new CheckExecutionResponse(
                     UUID.randomUUID(),
                     CheckType.HTTP,
-                    isSuccess ? CheckStatus.OK : CheckStatus.FAIL,
+                    isSuccess ? CheckStatus.OK : CheckStatus.FAILED, // Используем FAILED
                     duration,
                     status.value() + " " + status.getReasonPhrase(),
                     new HttpCheckDetailsDto(
@@ -87,11 +81,7 @@ public class SiteCheckService {
                             duration,
                             response.getHeaders().toSingleValueMap()
                     ),
-                    null, // pingDetails
-                    null, // tcpDetails
-                    null, // tracerouteDetails
-                    null, // dnsLookupDetails
-                    List.of() // metrics
+                    null, null, null, null, List.of()
             );
 
         } catch (Exception e) {
@@ -101,15 +91,10 @@ public class SiteCheckService {
             return new CheckExecutionResponse(
                     UUID.randomUUID(),
                     CheckType.HTTP,
-                    CheckStatus.FAIL,
+                    CheckStatus.FAILED, // Используем FAILED
                     duration,
                     "Error: " + e.getMessage(),
-                    new HttpCheckDetailsDto(
-                            "GET",
-                            0,
-                            duration,
-                            java.util.Map.of()
-                    ),
+                    new HttpCheckDetailsDto("GET", 0, duration, Map.of()),
                     null, null, null, null, List.of()
             );
         }
@@ -119,15 +104,10 @@ public class SiteCheckService {
         return new CheckExecutionResponse(
                 UUID.randomUUID(),
                 CheckType.HTTP,
-                CheckStatus.FAIL,
+                CheckStatus.FAILED, // Используем FAILED
                 duration,
                 errorMessage,
-                new HttpCheckDetailsDto(
-                        "GET",
-                        0,
-                        duration,
-                        java.util.Map.of()
-                ),
+                new HttpCheckDetailsDto("GET", 0, duration, Map.of()),
                 null, null, null, null, List.of()
         );
     }
