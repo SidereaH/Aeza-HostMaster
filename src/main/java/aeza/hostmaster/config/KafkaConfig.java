@@ -44,6 +44,14 @@ public class KafkaConfig {
     }
 
     @Bean
+    public NewTopic agentPingTasksTopic() {
+        return TopicBuilder.name("agent-tasks-ping")
+                .partitions(3)
+                .replicas(1)
+                .build();
+    }
+
+    @Bean
     public NewTopic checkResultsTopic() {
         return TopicBuilder.name("check-results")
                 .partitions(3)
