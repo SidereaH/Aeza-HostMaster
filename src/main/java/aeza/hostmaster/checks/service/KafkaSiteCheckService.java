@@ -35,7 +35,6 @@ public class KafkaSiteCheckService {
 
     private static final String AGENT_TASKS_TOPIC = "agent-tasks";
     private static final String CHECK_RESULTS_TOPIC = "check-results";
-    private static final String LEGACY_CHECK_RESULTS_TOPIC = "checks-results";
     private static final String AGENT_LOGS_TOPIC = "agent-logs";
 
     public KafkaSiteCheckService(KafkaTemplate<String, String> kafkaTemplate,
@@ -55,12 +54,11 @@ public class KafkaSiteCheckService {
                 ? List.of(CheckType.HTTP)
                 : request.checkTypes();
 
-        Instant createdAt = job.executedAt() != null ? job.executedAt() : Instant.now();
-        Instant scheduledAt = createdAt;
+        Instant now = Instant.now();
 
         try {
             for (CheckType checkType : checkTypes) {
-                AgentTaskMessage taskMessage = buildAgentTaskMessage(job, request, checkType, scheduledAt, createdAt);
+                AgentTaskMessage taskMessage = buildAgentTaskMessage(job, request, checkType, now);
                 String payload = objectMapper.writeValueAsString(taskMessage);
                 kafkaTemplate.send(AGENT_TASKS_TOPIC, job.jobId().toString(), payload);
             }
@@ -79,7 +77,11 @@ public class KafkaSiteCheckService {
     }
 
     @KafkaListener(topics = CHECK_RESULTS_TOPIC)
-    public void handleAgentCheckResult(ConsumerRecord<String, String> record) {
+    public void handleSiteCheckResult(ConsumerRecord<String, String> record) {
+        if (tryProcessAggregatedResult(record)) {
+            return;
+        }
+
         try {
             AgentCheckResult agentResult = objectMapper.readValue(record.value(), AgentCheckResult.class);
             processAgentCheckResult(agentResult);
@@ -90,22 +92,6 @@ public class KafkaSiteCheckService {
             } catch (IllegalArgumentException ex) {
                 log.error("Unable to update job status for malformed key {}", record.key());
             }
-        }
-    }
-
-    @KafkaListener(topics = LEGACY_CHECK_RESULTS_TOPIC)
-    public void handleAggregatedSiteCheckResult(ConsumerRecord<String, String> record) {
-        try {
-            SiteCheckResult result = objectMapper.readValue(record.value(), SiteCheckResult.class);
-            if (result.response() == null) {
-                log.debug("Aggregated result missing payload for job {}", result.taskId());
-                return;
-            }
-
-            storageService.saveSiteCheck(result.response());
-            jobService.completeJob(result.taskId(), result.response());
-        } catch (JsonProcessingException ex) {
-            log.debug("Failed to parse aggregated site check result for key {}: {}", record.key(), ex.getOriginalMessage());
         }
     }
 
@@ -134,8 +120,7 @@ public class KafkaSiteCheckService {
     private AgentTaskMessage buildAgentTaskMessage(CheckJobResponse job,
                                                   SiteCheckCreateRequest request,
                                                   CheckType checkType,
-                                                  Instant scheduledAt,
-                                                  Instant createdAt) {
+                                                  Instant scheduledAt) {
         Map<String, Object> parameters = buildParameters(checkType, request);
 
         return new AgentTaskMessage(
@@ -144,7 +129,7 @@ public class KafkaSiteCheckService {
                 request.target(),
                 parameters,
                 scheduledAt,
-                createdAt,
+                Instant.now(),
                 resolveTimeout(checkType, request)
         );
     }
@@ -221,6 +206,23 @@ public class KafkaSiteCheckService {
                     ? Math.toIntExact(Math.max(1, request.tracerouteConfig().timeoutMillis() / 1000))
                     : 30;
         };
+    }
+
+    private boolean tryProcessAggregatedResult(ConsumerRecord<String, String> record) {
+        try {
+            SiteCheckResult result = objectMapper.readValue(record.value(), SiteCheckResult.class);
+            if (result.response() == null) {
+                log.debug("Aggregated result missing payload for job {}", result.taskId());
+                return false;
+            }
+
+            storageService.saveSiteCheck(result.response());
+            jobService.completeJob(result.taskId(), result.response());
+            return true;
+        } catch (JsonProcessingException ex) {
+            log.debug("Message is not an aggregated site check result: {}", ex.getOriginalMessage());
+            return false;
+        }
     }
 
     private void processAgentCheckResult(AgentCheckResult result) {
