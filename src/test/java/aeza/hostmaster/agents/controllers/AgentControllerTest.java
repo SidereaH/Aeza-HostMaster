@@ -104,7 +104,7 @@ class AgentControllerTest {
         Mockito.when(agentService.rotateToken(1L)).thenReturn(dto);
         mockMvc.perform(post("/api/agents/1/rotate-token"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.agentToken", is("newtoken")));
+                .andExpect(jsonPath("$.agentToken", is("rawtoken")));
     }
 
     @Test
