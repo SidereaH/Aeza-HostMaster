@@ -1,26 +1,41 @@
 package aeza.hostmaster.checks.service;
 
-import aeza.hostmaster.checks.dto.*;
 import aeza.hostmaster.checks.domain.CheckStatus;
+import aeza.hostmaster.checks.domain.CheckType;
+import aeza.hostmaster.checks.dto.AgentCheckResult;
+import aeza.hostmaster.checks.dto.AgentTaskMessage;
+import aeza.hostmaster.checks.dto.CheckJobResponse;
+import aeza.hostmaster.checks.dto.SiteCheckCreateRequest;
+import aeza.hostmaster.checks.dto.SiteCheckResult;
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import org.apache.kafka.clients.consumer.ConsumerRecord;
-import org.springframework.kafka.core.KafkaTemplate;
-import org.springframework.kafka.annotation.KafkaListener;
-import org.springframework.stereotype.Service;
-
+import java.util.Map;
 import java.util.UUID;
+import java.time.Instant;
+import java.util.HashMap;
+import java.util.List;
+import java.util.stream.Collectors;
+import org.apache.kafka.clients.consumer.ConsumerRecord;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.kafka.annotation.KafkaListener;
+import org.springframework.kafka.core.KafkaTemplate;
+import org.springframework.stereotype.Service;
 
 @Service
 public class KafkaSiteCheckService {
+
+    private static final Logger log = LoggerFactory.getLogger(KafkaSiteCheckService.class);
 
     private final KafkaTemplate<String, String> kafkaTemplate;
     private final ObjectMapper objectMapper;
     private final SiteCheckStorageService storageService;
     private final CheckJobService jobService;
 
-    private static final String SITE_CHECK_REQUESTS_TOPIC = "checks-requests";
-    private static final String SITE_CHECK_RESULTS_TOPIC = "checks-results";
+    private static final String AGENT_TASKS_TOPIC = "agent-tasks";
+    private static final String CHECK_RESULTS_TOPIC = "check-results";
+    private static final String AGENT_LOGS_TOPIC = "agent-logs";
 
     public KafkaSiteCheckService(KafkaTemplate<String, String> kafkaTemplate,
                                  ObjectMapper objectMapper,
@@ -33,27 +48,22 @@ public class KafkaSiteCheckService {
     }
 
     public CheckJobResponse createSiteCheckJob(SiteCheckCreateRequest request) {
-        // Создаем job в БД
         CheckJobResponse job = jobService.createJob(request.target());
 
-        // Отправляем задание в Kafka
-        SiteCheckTask task = new SiteCheckTask(
-                job.jobId(),
-                request.target(),
-                SITE_CHECK_RESULTS_TOPIC,
-                request.checkTypes(),
-                request.tcpConfig(),
-                request.dnsConfig(),
-                request.tracerouteConfig()
-        );
+        List<CheckType> checkTypes = request.checkTypes() == null || request.checkTypes().isEmpty()
+                ? List.of(CheckType.HTTP)
+                : request.checkTypes();
+
+        Instant now = Instant.now();
 
         try {
-            String taskJson = objectMapper.writeValueAsString(task);
-            kafkaTemplate.send(SITE_CHECK_REQUESTS_TOPIC, job.jobId().toString(), taskJson);
+            for (CheckType checkType : checkTypes) {
+                AgentTaskMessage taskMessage = buildAgentTaskMessage(job, request, checkType, now);
+                String payload = objectMapper.writeValueAsString(taskMessage);
+                kafkaTemplate.send(AGENT_TASKS_TOPIC, job.jobId().toString(), payload);
+            }
 
-            // Обновляем статус на IN_PROGRESS
             jobService.updateJobStatus(job.jobId(), CheckStatus.IN_PROGRESS);
-
         } catch (Exception e) {
             jobService.updateJobStatus(job.jobId(), CheckStatus.FAILED);
             throw new RuntimeException("Failed to send site check task to Kafka", e);
@@ -66,21 +76,180 @@ public class KafkaSiteCheckService {
         return jobService.getJobStatus(jobId);
     }
 
-    @KafkaListener(topics = "checks-results")
+    @KafkaListener(topics = CHECK_RESULTS_TOPIC)
     public void handleSiteCheckResult(ConsumerRecord<String, String> record) {
+        if (tryProcessAggregatedResult(record)) {
+            return;
+        }
+
         try {
-            SiteCheckResult result = objectMapper.readValue(record.value(), SiteCheckResult.class);
-
-            // Сохраняем результат в БД
-            storageService.saveSiteCheck(result.response());
-
-            // Обновляем статус job и отправляем WebSocket
-            jobService.completeJob(result.taskId(), result.response());
-
+            AgentCheckResult agentResult = objectMapper.readValue(record.value(), AgentCheckResult.class);
+            processAgentCheckResult(agentResult);
         } catch (JsonProcessingException e) {
-            System.err.println("Failed to parse site check result: " + e.getMessage());
-            // Обновляем статус на FAILED
-            jobService.updateJobStatus(UUID.fromString(record.key()), CheckStatus.FAILED);
+            log.error("Failed to parse agent check result for key {}: {}", record.key(), e.getMessage());
+            try {
+                jobService.updateJobStatus(UUID.fromString(record.key()), CheckStatus.FAILED);
+            } catch (IllegalArgumentException ex) {
+                log.error("Unable to update job status for malformed key {}", record.key());
+            }
         }
     }
+
+    @KafkaListener(topics = AGENT_LOGS_TOPIC)
+    public void handleAgentLog(ConsumerRecord<String, String> record) {
+        UUID jobId;
+        try {
+            jobId = UUID.fromString(record.key());
+        } catch (IllegalArgumentException ex) {
+            log.warn("Received log with invalid job id key: {}", record.key());
+            return;
+        }
+
+        Object payload;
+        try {
+            JsonNode jsonNode = objectMapper.readTree(record.value());
+            payload = objectMapper.convertValue(jsonNode, Map.class);
+        } catch (JsonProcessingException ex) {
+            log.warn("Failed to parse agent log for job {}: {}", jobId, ex.getMessage());
+            payload = Map.of("message", record.value());
+        }
+
+        jobService.appendJobLog(jobId, payload);
+    }
+
+    private AgentTaskMessage buildAgentTaskMessage(CheckJobResponse job,
+                                                  SiteCheckCreateRequest request,
+                                                  CheckType checkType,
+                                                  Instant scheduledAt) {
+        Map<String, Object> parameters = buildParameters(checkType, request);
+
+        return new AgentTaskMessage(
+                job.jobId().toString(),
+                normalizeType(checkType),
+                request.target(),
+                parameters,
+                scheduledAt,
+                Instant.now(),
+                resolveTimeout(checkType, request)
+        );
+    }
+
+    private Map<String, Object> buildParameters(CheckType checkType, SiteCheckCreateRequest request) {
+        Map<String, Object> params = new HashMap<>();
+
+        switch (checkType) {
+            case HTTP -> {
+                params.put("method", "GET");
+                params.put("timeout", 5);
+            }
+            case TCP, TCP_CONNECT -> {
+                SiteCheckCreateRequest.TcpCheckConfig tcp = request.tcpConfig();
+                if (tcp != null) {
+                    if (tcp.port() != null) {
+                        params.put("port", tcp.port());
+                    }
+                    if (tcp.timeoutMillis() != null) {
+                        params.put("timeout_millis", tcp.timeoutMillis());
+                    }
+                }
+            }
+            case DNS_LOOKUP -> {
+                SiteCheckCreateRequest.DnsLookupConfig dns = request.dnsConfig();
+                if (dns != null) {
+                    if (dns.recordTypes() != null && !dns.recordTypes().isEmpty()) {
+                        params.put("record_types", dns.recordTypes().stream()
+                                .map(Enum::name)
+                                .collect(Collectors.toList()));
+                    }
+                    if (dns.dnsServer() != null) {
+                        params.put("dns_server", dns.dnsServer());
+                    }
+                }
+            }
+            case TRACEROUTE -> {
+                SiteCheckCreateRequest.TracerouteConfig traceroute = request.tracerouteConfig();
+                if (traceroute != null) {
+                    if (traceroute.maxHops() != null) {
+                        params.put("max_hops", traceroute.maxHops());
+                    }
+                    if (traceroute.timeoutMillis() != null) {
+                        params.put("timeout_millis", traceroute.timeoutMillis());
+                    }
+                }
+            }
+            case PING -> {
+                params.put("count", 4);
+            }
+        }
+
+        return params;
+    }
+
+    private String normalizeType(CheckType type) {
+        return switch (type) {
+            case HTTP -> "http";
+            case PING -> "ping";
+            case TCP, TCP_CONNECT -> "tcp";
+            case DNS_LOOKUP -> "dns";
+            case TRACEROUTE -> "traceroute";
+        };
+    }
+
+    private int resolveTimeout(CheckType type, SiteCheckCreateRequest request) {
+        return switch (type) {
+            case HTTP, PING -> 10;
+            case TCP, TCP_CONNECT -> request.tcpConfig() != null && request.tcpConfig().timeoutMillis() != null
+                    ? Math.toIntExact(Math.max(1, request.tcpConfig().timeoutMillis() / 1000))
+                    : 10;
+            case DNS_LOOKUP -> 10;
+            case TRACEROUTE -> request.tracerouteConfig() != null && request.tracerouteConfig().timeoutMillis() != null
+                    ? Math.toIntExact(Math.max(1, request.tracerouteConfig().timeoutMillis() / 1000))
+                    : 30;
+        };
+    }
+
+    private boolean tryProcessAggregatedResult(ConsumerRecord<String, String> record) {
+        try {
+            SiteCheckResult result = objectMapper.readValue(record.value(), SiteCheckResult.class);
+            if (result.response() == null) {
+                log.debug("Aggregated result missing payload for job {}", result.taskId());
+                return false;
+            }
+
+            storageService.saveSiteCheck(result.response());
+            jobService.completeJob(result.taskId(), result.response());
+            return true;
+        } catch (JsonProcessingException ex) {
+            log.debug("Message is not an aggregated site check result: {}", ex.getOriginalMessage());
+            return false;
+        }
+    }
+
+    private void processAgentCheckResult(AgentCheckResult result) {
+        UUID jobId;
+        try {
+            jobId = UUID.fromString(result.taskId());
+        } catch (IllegalArgumentException ex) {
+            log.warn("Received agent result with invalid job id: {}", result.taskId());
+            return;
+        }
+
+        Map<String, Object> payload = new HashMap<>();
+        payload.put("agent_id", result.agentId());
+        payload.put("status", result.status());
+        payload.put("duration", result.duration());
+        payload.put("error", result.error());
+        payload.put("timestamp", result.timestamp());
+
+        jobService.appendJobLog(jobId, payload);
+
+        if (result.status() != null) {
+            if ("success".equalsIgnoreCase(result.status())) {
+                jobService.updateJobStatus(jobId, CheckStatus.COMPLETED);
+            } else if ("failed".equalsIgnoreCase(result.status()) || "error".equalsIgnoreCase(result.status())) {
+                jobService.updateJobStatus(jobId, CheckStatus.FAILED);
+            }
+        }
+    }
+
 }
