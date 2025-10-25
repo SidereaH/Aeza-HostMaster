@@ -3,6 +3,7 @@ package aeza.hostmaster.agents.controllers;
 import aeza.hostmaster.agents.controller.AgentController;
 import aeza.hostmaster.agents.dto.AgentDTO;
 import aeza.hostmaster.agents.dto.AgentRegistrationRequest;
+import aeza.hostmaster.agents.models.Agent;
 import aeza.hostmaster.agents.services.AgentService;
 import aeza.hostmaster.config.SecurityConfig;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -24,6 +25,7 @@ import java.util.List;
 import static org.hamcrest.Matchers.*;
 import static org.mockito.ArgumentMatchers.*;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
@@ -55,74 +57,93 @@ class AgentControllerTest {
     }
 
     @Test
-    @WithMockUser(roles = "AGENT")
-    void heartbeatById_ReturnsOk() throws Exception {
-        AgentDTO dto = new AgentDTO(1L,"a","1.1.1.1","RU","rawtoken", null, "ACTIVE");
-        Mockito.when(agentService.updateHeartbeat(1L)).thenReturn(dto);
-        mockMvc.perform(post("/api/agents/1/heartbeat"))
+    void heartbeatById_ReturnsOkForAdmin() throws Exception {
+        AgentDTO dto = new AgentDTO(1L,"a","1.1.1.1","RU",null, OffsetDateTime.now(), "ACTIVE");    Mockito.when(agentService.updateHeartbeat(1L)).thenReturn(dto);
+        mockMvc.perform(post("/api/agents/1/heartbeat")
+                        .with(user(adminPrincipal())))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.id", is(1)));
     }
-
     @Test
-    @WithMockUser(roles = "AGENT")
-    void heartbeatByName_ReturnsOk() throws Exception {
-        AgentDTO dto = new AgentDTO(1L,"a","1.1.1.1","RU","rawtoken", null, "ACTIVE");
-        Mockito.when(agentService.heartbeatByNameAndToken(eq("a"), eq("raw"))).thenReturn(dto);
+    void heartbeatAuthenticated_ReturnsOk() throws Exception {
+        AgentDTO dto = new AgentDTO(1L,"agent-1","1.1.1.1","RU",null, OffsetDateTime.now(), "ACTIVE");
+        Mockito.when(agentService.heartbeatAuthenticated("agent-1")).thenReturn(dto);
+
         mockMvc.perform(post("/api/agents/heartbeat")
-                        .param("agentName","a")
-                        .param("token","raw"))
+                        .with(user(agentPrincipal())))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.agentName", is("a")));
+                .andExpect(jsonPath("$.agentName", is("agent-1")));
     }
-
     @Test
-    @WithMockUser(roles = "AGENT")
-    void getById_ReturnsOk() throws Exception {
-        AgentDTO dto = new AgentDTO(1L,"a","1.1.1.1","RU","rawtoken", null, "ACTIVE");
+    void getById_ReturnsOkForSameAgent() throws Exception {
+        AgentDTO dto = new AgentDTO(1L,"agent-1","1.1.1.1","RU",null, OffsetDateTime.now(), "ACTIVE");
         Mockito.when(agentService.getAgent(1L)).thenReturn(dto);
-        mockMvc.perform(get("/api/agents/1"))
+
+        mockMvc.perform(get("/api/agents/1")
+                        .with(user(agentPrincipal())))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.agentName", is("a")));
+                .andExpect(jsonPath("$.agentName", is("agent-1")));
     }
 
+
     @Test
-    @WithMockUser(roles = "AGENT")
-    void list_ReturnsPage() throws Exception {
-        AgentDTO dto = new AgentDTO(1L,"a","1.1.1.1","RU","rawtoken", null, "ACTIVE");
+    void list_ReturnsPageForAdmin() throws Exception {
+        AgentDTO dto = new AgentDTO(1L,"agent-1","1.1.1.1","RU",null, OffsetDateTime.now(), "ACTIVE");
         Mockito.when(agentService.listAgents(any())).thenReturn(new PageImpl<>(List.of(dto), PageRequest.of(0,10), 1));
-        mockMvc.perform(get("/api/agents"))
+
+        mockMvc.perform(get("/api/agents")
+                        .with(user(adminPrincipal())))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.content", hasSize(1)))
-                .andExpect(jsonPath("$.content[0].agentName", is("a")));
+                .andExpect(jsonPath("$.content[0].agentName", is("agent-1")));
     }
 
     @Test
-    @WithMockUser(roles = "AGENT")
-    void rotateToken_ReturnsNewToken() throws Exception {
-        AgentDTO dto = new AgentDTO(1L,"a","1.1.1.1","RU","rawtoken", null, "ACTIVE");
+    void rotateToken_ReturnsNewTokenForAgent() throws Exception {
+        AgentDTO dto = new AgentDTO(1L,"agent-1","1.1.1.1","RU","rawtoken", null, "ACTIVE");
         Mockito.when(agentService.rotateToken(1L)).thenReturn(dto);
-        mockMvc.perform(post("/api/agents/1/rotate-token"))
+
+        mockMvc.perform(post("/api/agents/1/rotate-token")
+                        .with(user(agentPrincipal())))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.agentToken", is("rawtoken")));
     }
 
     @Test
-    @WithMockUser(roles = "AGENT")
-    void delete_ReturnsNoContent() throws Exception {
+    void delete_ReturnsNoContentForAdmin() throws Exception {
         Mockito.doNothing().when(agentService).deleteAgent(1L);
-        mockMvc.perform(delete("/api/agents/1"))
+
+        mockMvc.perform(delete("/api/agents/1")
+                        .with(user(adminPrincipal())))
                 .andExpect(status().isNoContent());
     }
 
     @Test
-    @WithMockUser(roles = "AGENT")
-    void validate_ReturnsBoolean() throws Exception {
+    void validate_ReturnsBooleanForAdmin() throws Exception {
         Mockito.when(agentService.validateToken("a","raw")).thenReturn(true);
+
         mockMvc.perform(get("/api/agents/validate")
+                        .with(user(adminPrincipal()))
                         .param("agentName","a")
                         .param("token","raw"))
                 .andExpect(status().isOk())
                 .andExpect(content().string("true"));
+    }
+
+    private Agent agentPrincipal() {
+        Agent agent = new Agent();
+        agent.setId(1L);
+        agent.setAgentName("agent-1");
+        agent.setAgentToken("hashed");
+        agent.setStatus(Agent.Status.ACTIVE);
+        return agent;
+    }
+
+    private org.springframework.security.core.userdetails.UserDetails adminPrincipal() {
+        return org.springframework.security.core.userdetails.User
+                .withUsername("admin")
+                .password("password")
+                .roles("ADMIN")
+                .build();
     }
 }

@@ -134,27 +134,21 @@ class AgentServiceTest {
     }
 
     @Test
-    void heartbeatByNameAndToken_Success() {
+    void heartbeatAuthenticated_Success() {
         when(repo.findByAgentName("agent-1")).thenReturn(Optional.of(sampleAgent));
-        when(encoder.matches(anyString(), anyString())).thenReturn(true);
         when(repo.save(any())).thenAnswer(i -> i.getArgument(0));
-        AgentDTO dto = service.heartbeatByNameAndToken("agent-1","raw");
+        AgentDTO dto = service.heartbeatAuthenticated("agent-1");
+
         assertThat(dto.getLastHeartbeat()).isNotNull();
+        verify(repo).save(any());;
     }
 
-    @Test
-    void heartbeatByNameAndToken_BadCredentials() {
-        when(repo.findByAgentName("agent-1")).thenReturn(Optional.of(sampleAgent));
-        when(encoder.matches(anyString(), anyString())).thenReturn(false);
-        assertThatThrownBy(() -> service.heartbeatByNameAndToken("agent-1","bad"))
-                .isInstanceOf(BadCredentialsException.class);
-    }
 
     @Test
-    void heartbeatByNameAndToken_AgentNotFound() {
+    void heartbeatAuthenticated_AgentNotFound() {
         when(repo.findByAgentName("no")).thenReturn(Optional.empty());
-        assertThatThrownBy(() -> service.heartbeatByNameAndToken("no","raw")).isInstanceOf(AgentNotFoundException.class);
-    }
+        assertThatThrownBy(() -> service.heartbeatAuthenticated("no"))
+                .isInstanceOf(AgentNotFoundException.class);    }
 
     @Test
     void getAgent_SuccessAndNotFound() {
