@@ -87,7 +87,7 @@ public class KafkaSiteCheckService {
 
     @KafkaListener(
             topics = CHECK_RESULTS_TOPIC,
-            autoStartup = "${app.kafka.agent-listeners-enabled:false}"
+            autoStartup = "${app.kafka.agent-listeners-enabled:true}"
     )
     public void handleSiteCheckResult(ConsumerRecord<String, String> record) {
         JsonNode payload;
