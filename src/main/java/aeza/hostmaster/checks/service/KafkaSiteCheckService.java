@@ -86,7 +86,8 @@ public class KafkaSiteCheckService {
 
     @KafkaListener(
             topics = CHECK_RESULTS_TOPIC,
-            autoStartup = "${app.kafka.agent-listeners-enabled:true}"
+            autoStartup = "${app.kafka.agent-listeners-enabled:true}",
+            groupId = "hostmaster-group"
     )
     public void handleSiteCheckResult(ConsumerRecord<String, String> record) {
         JsonNode payload;
@@ -122,7 +123,8 @@ public class KafkaSiteCheckService {
 
     @KafkaListener(
             topics = AGENT_LOGS_TOPIC,
-            autoStartup = "${app.kafka.agent-listeners-enabled:true}"
+            autoStartup = "${app.kafka.agent-listeners-enabled:true}",
+            groupId = "hostmaster-group"
     )
     public void handleAgentLog(ConsumerRecord<String, String> record) {
         UUID jobId;
