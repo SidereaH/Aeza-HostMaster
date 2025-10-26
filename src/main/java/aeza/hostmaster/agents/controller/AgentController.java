@@ -76,7 +76,6 @@ public class AgentController {
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Heartbeat обновлен"),
             @ApiResponse(responseCode = "401", description = "Неверные учетные данные"),
-            @ApiResponse(responseCode = "401", description = "Неверные учетные данные"),
             @ApiResponse(responseCode = "403", description = "Доступ запрещен")
     })
     @PostMapping("/heartbeat")

@@ -66,6 +66,7 @@ graph TB
 - Docker 24.0+
 - Docker Compose
 - Git
+- Kafka
 
 ### Запуск всей системы
 
@@ -84,20 +85,13 @@ docker-compose ps
 Система будет доступна:
 - **Frontend**: http://localhost:3000
 - **Backend API**: http://localhost:8080
-- **Kafka UI**: http://localhost:8081
-- **API Docs**: http://localhost:8080/api/docs
+- **API Docs**: http://localhost:8080/swagger_ui/index.html
 
 ---
 
 ## 🤖 Регистрация агента
 
-### 1. Автоматическая регистрация через UI
-```bash
-# Перейдите в раздел "Агенты" в веб-интерфейсе
-# Нажмите "Добавить агент" и следуйте инструкциям
-```
-
-### 2. Ручная регистрация через API
+### 1. Ручная регистрация через API
 ```bash
 curl -X POST http://localhost:8080/api/agents/register \
   -H "Content-Type: application/json" \
@@ -111,74 +105,35 @@ curl -X POST http://localhost:8080/api/agents/register \
 ### 3. Запуск агента
 ```bash
 # Скачайте бинарный файл агента
-wget https://github.com/your-org/aeza-hostmaster/releases/latest/download/agent-linux-amd64
+git clone https://sourcecraft.dev/hmae/agent-aeza
 
-# Сделайте исполняемым
-chmod +x agent-linux-amd64
+cd agent-aeza
+
+# Отредактируйте переменные, либо добавьте AGENT_NAME, AGENT_TOKEN, AGENT_COUNTRY в .env
+nano docker-compose.yaml
 
 # Запустите агент
-./agent-linux-amd64 \
-  --name europe-agent-01 \
-  --token YOUR_AGENT_TOKEN \
-  --kafka-brokers localhost:9092
+docker compose up -d && docker compose logs -f 
 ```
 
 ---
 
-## 📡 API Использование
 
-### Создание проверки
-```bash
-curl -X POST http://localhost:8080/api/checks \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer YOUR_API_TOKEN" \
-  -d '{
-    "target": "google.com",
-    "checkTypes": ["HTTP", "PING", "DNS"],
-    "agents": ["europe-agent-01", "usa-agent-01"]
-  }'
-```
+## 🔧 Основные репозитории
 
-### Получение результатов
-```bash
-curl -X GET "http://localhost:8080/api/checks/{checkId}/results" \
-  -H "Authorization: Bearer YOUR_API_TOKEN"
-```
+### Backend
+https://sourcecraft.dev/hmae/aeza-hostmaster
 
----
+###  Frontend
+https://sourcecraft.dev/hmae/aeza-hostmaster
 
-## 🔧 Разработка
-
-### Локальная разработка Backend
-```bash
-cd backend
-./gradlew bootRun
-```
-
-### Локальная разработка Frontend
-```bash
-cd frontend
-npm install
-npm start
-```
-
-### Локальная разработка Agent
-```bash
-cd agent
-go build
-./agent --name local-agent --token YOUR_TOKEN --kafka-brokers localhost:9092
-```
+###  Agent
+https://sourcecraft.dev/hmae/agent-aeza
 
 ### Тестирование
 ```bash
 # Backend тесты
 cd backend && ./gradlew test
-
-# Agent тесты  
-cd agent && go test ./...
-
-# E2E тесты
-docker-compose -f docker-compose.test.yml up
 ```
 
 
@@ -187,31 +142,9 @@ docker-compose -f docker-compose.test.yml up
 
 ## 🔐 Безопасность
 
-- **Аутентификация агентов** - JWT токены
-- **HTTPS поддержка** - для всех внешних коммуникаций
+- **Аутентификация агентов** - Basic Auth
 - **Валидация входных данных** - защита от инъекций
-- **Rate limiting** - ограничение запросов
 - **Изоляция агентов** - Docker для безопасности
-
-
-
----
-
-## 🤝 Участие в разработке
-
-Мы приветствуем вклад в проект! Пожалуйста:
-
-1. Форкните репозиторий
-2. Создайте feature ветку (`git checkout -b feature/amazing-feature`)
-3. Закоммитьте изменения (`git commit -m 'Add amazing feature'`)
-4. Запушьте в ветку (`git push origin feature/amazing-feature`)
-5. Откройте Pull Request
-
----
-
-## 📄 Лицензия
-
-Этот проект лицензирован под MIT License - смотрите файл [LICENSE](LICENSE) для деталей.
 
 ---
 
@@ -226,7 +159,7 @@ docker-compose -f docker-compose.test.yml up
 
 ## 🏆 Команда проекта
 
-Разработано с ❤️ для хакатона **Хакатон Осень 2025**
+Разработано с ❤️ by Team78&& для хакатона **Хакатон Осень 2025**
 
 
 ---
