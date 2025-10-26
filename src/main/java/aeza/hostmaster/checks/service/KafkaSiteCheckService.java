@@ -390,7 +390,10 @@ public class KafkaSiteCheckService {
         payload.put("duration", result.duration());
         payload.put("error", result.error());
         payload.put("timestamp", result.timestamp());
-
+        if (result.payload() != null && !result.payload().isNull()) {
+            Object payloadForClient = extractPayloadForClient(result.payload());
+            payload.put("payload", payloadForClient);
+        }
         jobService.appendJobLog(jobId, payload);
 
         if (result.status() != null) {

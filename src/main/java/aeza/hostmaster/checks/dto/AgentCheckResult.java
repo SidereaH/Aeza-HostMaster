@@ -1,6 +1,7 @@
 package aeza.hostmaster.checks.dto;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fasterxml.jackson.databind.JsonNode;
 
 public record AgentCheckResult(
         @JsonProperty("task_id") String taskId,
@@ -8,6 +9,7 @@ public record AgentCheckResult(
         String status,
         Long duration,
         String error,
-        String timestamp
+        String timestamp,
+        JsonNode payload
 ) {
 }
