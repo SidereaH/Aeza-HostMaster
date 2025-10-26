@@ -40,7 +40,6 @@ public class KafkaSiteCheckService {
     private final CheckResultsWebSocketHandler checkResultsWebSocketHandler;
 
     private static final String AGENT_TASKS_TOPIC = "agent-tasks";
-    private static final String AGENT_BROADCAST_TASKS_TOPIC = "agent-tasks-ping";
     private static final String CHECK_RESULTS_TOPIC = "check-results";
     private static final String AGENT_LOGS_TOPIC = "agent-logs";
 
