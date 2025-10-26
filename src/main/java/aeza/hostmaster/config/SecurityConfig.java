@@ -2,9 +2,11 @@ package aeza.hostmaster.config;
 
 import aeza.hostmaster.agents.services.AgentService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Lazy;
+import org.springframework.http.HttpMethod;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.dao.DaoAuthenticationProvider;
 import org.springframework.security.config.Customizer;
@@ -34,11 +36,18 @@ public class SecurityConfig {
         return new BCryptPasswordEncoder();
     }
 
+
+    @Value("${SPRING_SECURITY_USER_NAME:admin}")
+    private String adminUsername;
+
+    @Value("${SPRING_SECURITY_USER_PASSWORD:admin}")
+    private String adminPassword;
+
     @Bean
     public UserDetailsService adminUserDetailsService(PasswordEncoder passwordEncoder) {
         UserDetails adminUser = User.builder()
-                .username("admin")
-                .password(passwordEncoder.encode("admin"))
+                .username(adminUsername)
+                .password(passwordEncoder.encode(adminPassword))
                 .roles("ADMIN")
                 .build();
 
@@ -69,12 +78,16 @@ public class SecurityConfig {
                         .requestMatchers(
                                 "/api/agents/register",
                                 "/api/docs/**",
+                                "/api/agents/docs",
                                 "/swagger-ui/**",
                                 "/v3/api-docs/**",
                                 "/swagger-resources/**",
                                 "/webjars/**"
 
                         ).permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/metric").hasRole("AGENT")
+                        .requestMatchers(HttpMethod.GET, "/api/agent/**").hasRole("ADMIN")
+                        .requestMatchers("/api/checks/**").hasRole("ADMIN")
                         .anyRequest().authenticated()
                 )
                 .userDetailsService(adminUserDetailsService)
