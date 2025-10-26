@@ -27,43 +27,43 @@ public class SiteCheckStorageService {
                 response.totalDurationMillis()
         );
 
-        // Сохраняем checks
-        response.checks().forEach(check -> {
-            CheckExecutionEntity checkEntity = new CheckExecutionEntity(
-                    check.id(),
-                    check.type(),
-                    check.status(),
-                    check.durationMillis(),
-                    check.message()
-            );
+        if (response.checks() != null) {
+            response.checks().forEach(check -> {
+                CheckExecutionEntity checkEntity = new CheckExecutionEntity(
+                        check.id(),
+                        check.type(),
+                        check.status(),
+                        check.durationMillis(),
+                        check.message()
+                );
 
-            // Сохраняем HTTP details если есть
-            if (check.httpDetails() != null) {
-                HttpDetailsEntity httpDetails = new HttpDetailsEntity();
-                httpDetails.setId(UUID.randomUUID());
-                httpDetails.setMethod(check.httpDetails().method());
-                httpDetails.setStatusCode(check.httpDetails().statusCode());
-                httpDetails.setResponseTimeMillis(check.httpDetails().responseTimeMillis());
-                httpDetails.setHeaders(check.httpDetails().headers());
-                checkEntity.setHttpDetails(httpDetails);
-            }
+                // Сохраняем HTTP details если есть
+                if (check.httpDetails() != null) {
+                    HttpDetailsEntity httpDetails = new HttpDetailsEntity();
+                    httpDetails.setId(UUID.randomUUID());
+                    httpDetails.setMethod(check.httpDetails().method());
+                    httpDetails.setStatusCode(check.httpDetails().statusCode());
+                    httpDetails.setResponseTimeMillis(check.httpDetails().responseTimeMillis());
+                    httpDetails.setHeaders(check.httpDetails().headers());
+                    checkEntity.setHttpDetails(httpDetails);
+                }
 
-            // Сохраняем metrics если есть
-            if (check.metrics() != null && !check.metrics().isEmpty()) {
-                check.metrics().forEach(metricDto -> {
-                    CheckMetricEntity metric = new CheckMetricEntity();
-                    metric.setId(UUID.randomUUID());
-                    metric.setName(metricDto.name());
-                    metric.setValue(metricDto.value());
-                    metric.setUnit(metricDto.unit());
-                    metric.setDescription(metricDto.description());
-                    checkEntity.addMetric(metric);
-                });
-            }
+                // Сохраняем metrics если есть
+                if (check.metrics() != null && !check.metrics().isEmpty()) {
+                    check.metrics().forEach(metricDto -> {
+                        CheckMetricEntity metric = new CheckMetricEntity();
+                        metric.setId(UUID.randomUUID());
+                        metric.setName(metricDto.name());
+                        metric.setValue(metricDto.value());
+                        metric.setUnit(metricDto.unit());
+                        metric.setDescription(metricDto.description());
+                        checkEntity.addMetric(metric);
+                    });
+                }
 
-            siteCheck.addCheck(checkEntity);
-        });
-
+                siteCheck.addCheck(checkEntity);
+            });
+        }
         siteCheckRepository.save(siteCheck);
     }
 }
