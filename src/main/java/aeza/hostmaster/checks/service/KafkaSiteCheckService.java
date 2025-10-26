@@ -179,9 +179,9 @@ public class KafkaSiteCheckService {
 
 
     private String resolveTopic(CheckType checkType) {
-        if (checkType == CheckType.PING) {
-            return AGENT_BROADCAST_TASKS_TOPIC;
-        }
+//        if (checkType == CheckType.PING) {
+//            return AGENT_BROADCAST_TASKS_TOPIC;
+//        }
 
         return AGENT_TASKS_TOPIC;
     }
