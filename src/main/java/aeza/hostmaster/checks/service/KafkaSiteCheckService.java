@@ -123,7 +123,7 @@ public class KafkaSiteCheckService {
 
     @KafkaListener(
             topics = AGENT_LOGS_TOPIC,
-            autoStartup = "${app.kafka.agent-listeners-enabled:false}"
+            autoStartup = "${app.kafka.agent-listeners-enabled:true}"
     )
     public void handleAgentLog(ConsumerRecord<String, String> record) {
         UUID jobId;
