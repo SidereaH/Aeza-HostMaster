@@ -53,7 +53,15 @@ public class SecurityConfig {
 
         return new InMemoryUserDetailsManager(adminUser);
     }
-
+    @Bean
+    public DaoAuthenticationProvider adminAuthenticationProvider(PasswordEncoder passwordEncoder,
+                                                                 UserDetailsService adminUserDetailsService) {
+        DaoAuthenticationProvider provider = new DaoAuthenticationProvider();
+        provider.setUserDetailsService(adminUserDetailsService);
+        provider.setPasswordEncoder(passwordEncoder);
+        provider.setHideUserNotFoundExceptions(true);
+        return provider;
+    }
     @Bean
     public DaoAuthenticationProvider agentAuthenticationProvider(PasswordEncoder passwordEncoder) {
         DaoAuthenticationProvider provider = new DaoAuthenticationProvider();
@@ -71,10 +79,12 @@ public class SecurityConfig {
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http,
                                            UserDetailsService adminUserDetailsService,
+                                           DaoAuthenticationProvider adminAuthenticationProvider,
                                            DaoAuthenticationProvider agentAuthenticationProvider) throws Exception {
         http
                 .csrf(csrf -> csrf.disable())
                 .authorizeHttpRequests(auth -> auth
+                        .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                         .requestMatchers(
                                 "/api/agents/register",
                                 "/api/docs/**",
@@ -93,6 +103,7 @@ public class SecurityConfig {
                 .userDetailsService(adminUserDetailsService)
                 .httpBasic(Customizer.withDefaults())
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+                .authenticationProvider(adminAuthenticationProvider)
                 .authenticationProvider(agentAuthenticationProvider);
 
         return http.build();
