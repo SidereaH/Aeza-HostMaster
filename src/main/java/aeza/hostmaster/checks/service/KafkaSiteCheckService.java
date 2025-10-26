@@ -354,13 +354,33 @@ public class KafkaSiteCheckService {
         }
 
         if (type == null) {
-            return data;
+            return convertNode(data);
         }
 
         ObjectNode result = objectMapper.createObjectNode();
         result.put("type", type);
         result.set("data", data);
-        return result;
+        return convertNode(result);
+    }
+
+    private Object convertNode(JsonNode node) {
+        if (node == null || node.isNull()) {
+            return null;
+        }
+
+        if (node.isValueNode()) {
+            if (node.isTextual()) {
+                return node.asText();
+            }
+            if (node.isNumber()) {
+                return node.numberValue();
+            }
+            if (node.isBoolean()) {
+                return node.booleanValue();
+            }
+        }
+
+        return objectMapper.convertValue(node, Object.class);
     }
 
     private void handleInvalidMessage(String key) {
