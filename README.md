@@ -102,7 +102,7 @@ curl -X POST http://localhost:8080/api/agents/register \
   }'
 ```
 
-### 3. Запуск агента
+### 2. Запуск агента
 ```bash
 # Скачайте бинарный файл агента
 git clone https://sourcecraft.dev/hmae/agent-aeza
