@@ -40,6 +40,7 @@ services:
       SPRING_SECURITY_USER_NAME: ${APP_USER:-admin}
       SPRING_SECURITY_USER_PASSWORD: ${APP_PASSWORD:-admin}
       SPRING_SECURITY_USER_ROLE: ${APP_ROLE:-AGENT}
+      SPRING_KAFKA_CONSUMER_GROUP_ID: hostmaster-group
     ports:
       - "8080:8080"
 

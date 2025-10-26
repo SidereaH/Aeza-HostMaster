@@ -85,7 +85,6 @@ public class KafkaSiteCheckService {
     }
 
     @KafkaListener(
-            id = "check-results_listener",
             topics = CHECK_RESULTS_TOPIC,
             autoStartup = "${app.kafka.agent-listeners-enabled:true}",
             groupId = "hostmaster-group"
@@ -123,7 +122,6 @@ public class KafkaSiteCheckService {
     }
 
     @KafkaListener(
-            id = "agent_logs_listener",
             topics = AGENT_LOGS_TOPIC,
             autoStartup = "${app.kafka.agent-listeners-enabled:true}",
             groupId = "hostmaster-group"
