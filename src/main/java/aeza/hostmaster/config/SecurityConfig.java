@@ -77,11 +77,14 @@ public class SecurityConfig {
         return authConfig.getAuthenticationManager();
     }
     @Bean
-    public SecurityFilterChain filterChain(HttpSecurity http,
-                                           UserDetailsService adminUserDetailsService,
-                                           DaoAuthenticationProvider adminAuthenticationProvider,
-                                           DaoAuthenticationProvider agentAuthenticationProvider) throws Exception {
+    public SecurityFilterChain filterChain(
+            HttpSecurity http,
+            UserDetailsService adminUserDetailsService,
+            DaoAuthenticationProvider adminAuthenticationProvider,
+            DaoAuthenticationProvider agentAuthenticationProvider
+    ) throws Exception {
         http
+                .cors(Customizer.withDefaults()) // <-- ВАЖНО: включаем CORS
                 .csrf(csrf -> csrf.disable())
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
@@ -93,7 +96,6 @@ public class SecurityConfig {
                                 "/v3/api-docs/**",
                                 "/swagger-resources/**",
                                 "/webjars/**"
-
                         ).permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/metric").hasRole("AGENT")
                         .requestMatchers(HttpMethod.GET, "/api/agent/**").hasRole("ADMIN")
@@ -108,4 +110,5 @@ public class SecurityConfig {
 
         return http.build();
     }
+
 }
