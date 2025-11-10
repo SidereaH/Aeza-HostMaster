@@ -21,6 +21,8 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.stream.Collectors;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -32,6 +34,9 @@ import org.springframework.stereotype.Service;
 public class KafkaSiteCheckService {
 
     private static final Logger log = LoggerFactory.getLogger(KafkaSiteCheckService.class);
+    private static final Pattern UUID_PATTERN = Pattern.compile(
+            "([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})"
+    );
 
     private final KafkaTemplate<String, String> kafkaTemplate;
     private final ObjectMapper objectMapper;
@@ -126,21 +131,24 @@ public class KafkaSiteCheckService {
             autoStartup = "${app.kafka.agent-listeners-enabled:false}"
     )
     public void handleAgentLog(ConsumerRecord<String, String> record) {
-        UUID jobId;
+        JsonNode jsonPayload = null;
+        Map<String, Object> payload = Map.of("message", record.value());
+
         try {
-            jobId = UUID.fromString(record.key());
-        } catch (IllegalArgumentException ex) {
-            log.warn("Received log with invalid job id key: {}", record.key());
-            return;
+            jsonPayload = objectMapper.readTree(record.value());
+            try {
+                payload = objectMapper.convertValue(jsonPayload, Map.class);
+            } catch (IllegalArgumentException ex) {
+                log.warn("Failed to map agent log payload for key {}: {}", record.key(), ex.getMessage());
+            }
+        } catch (JsonProcessingException ex) {
+            log.warn("Failed to parse agent log payload for key {}: {}", record.key(), ex.getOriginalMessage());
         }
 
-        Object payload;
-        try {
-            JsonNode jsonNode = objectMapper.readTree(record.value());
-            payload = objectMapper.convertValue(jsonNode, Map.class);
-        } catch (JsonProcessingException ex) {
-            log.warn("Failed to parse agent log for job {}: {}", jobId, ex.getMessage());
-            payload = Map.of("message", record.value());
+        UUID jobId = resolveJobId(record.key(), jsonPayload);
+        if (jobId == null) {
+            log.warn("Received log with invalid job id key: {}", record.key());
+            return;
         }
 
         jobService.appendJobLog(jobId, payload);
@@ -283,7 +291,14 @@ public class KafkaSiteCheckService {
             try {
                 return UUID.fromString(key);
             } catch (IllegalArgumentException ignored) {
-                // try to extract from payload
+                Matcher matcher = UUID_PATTERN.matcher(key);
+                if (matcher.find()) {
+                    try {
+                        return UUID.fromString(matcher.group(1));
+                    } catch (IllegalArgumentException ignoredExtract) {
+                        log.debug("Failed to extract UUID from key {}", key);
+                    }
+                }
             }
         }
 
