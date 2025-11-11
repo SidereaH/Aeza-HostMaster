@@ -1,11 +1,15 @@
 package aeza.hostmaster.checks.service;
 
+import aeza.hostmaster.checks.domain.CheckStatus;
+import aeza.hostmaster.checks.dto.CheckExecutionResponse;
 import aeza.hostmaster.checks.dto.SiteCheckResponse;
 import aeza.hostmaster.checks.entity.*;
 import aeza.hostmaster.checks.repository.SiteCheckRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Instant;
+import java.util.List;
 import java.util.UUID;
 
 @Service
@@ -19,16 +23,46 @@ public class SiteCheckStorageService {
 
     @Transactional
     public void saveSiteCheck(SiteCheckResponse response) {
+        SiteCheckEntity existing = siteCheckRepository.findById(response.id()).orElse(null);
+
+        String target = response.target();
+        if ((target == null || target.isBlank()) && existing != null) {
+            target = existing.getTarget();
+        }
+        if (target == null || target.isBlank()) {
+            throw new IllegalArgumentException("Site check response target is required");
+        }
+
+        Instant executedAt = response.executedAt();
+        if (executedAt == null && existing != null) {
+            executedAt = existing.getExecutedAt();
+        }
+        if (executedAt == null) {
+            executedAt = Instant.now();
+        }
+
+        CheckStatus status = response.status();
+        if (status == null && existing != null) {
+            status = existing.getStatus();
+        }
+        if (status == null) {
+            status = CheckStatus.COMPLETED;
+        }
+
         SiteCheckEntity siteCheck = new SiteCheckEntity(
                 response.id(),
-                response.target(),
-                response.executedAt(),
-                response.status(),
+                target,
+                executedAt,
+                status,
                 response.totalDurationMillis()
         );
 
         // Сохраняем checks
-        response.checks().forEach(check -> {
+        List<CheckExecutionResponse> checks = response.checks() == null
+                ? List.of()
+                : response.checks();
+
+        checks.forEach(check -> {
             CheckExecutionEntity checkEntity = new CheckExecutionEntity(
                     check.id(),
                     check.type(),
