@@ -12,12 +12,12 @@ public record PingCheckDetailsDto(
         @JsonAlias({"packetLossPercentage", "packet_loss", "loss_percent"})
         Double packetLossPercentage,
         @JsonAlias({"minimumRttMillis", "min", "min_rtt", "min_ms"})
-        Double minimumRttMillis,
+        Long minimumRttMillis,
         @JsonAlias({"averageRttMillis", "avg", "average", "avg_rtt", "avg_ms"})
-        Double averageRttMillis,
+        Long averageRttMillis,
         @JsonAlias({"maximumRttMillis", "max", "max_rtt", "max_ms"})
-        Double maximumRttMillis,
+        Long maximumRttMillis,
         @JsonAlias({"standardDeviationRttMillis", "stddev", "std_dev", "stddev_ms"})
-        Double standardDeviationRttMillis
+        Long standardDeviationRttMillis
 ) {
 }

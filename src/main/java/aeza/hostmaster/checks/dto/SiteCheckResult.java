@@ -10,6 +10,6 @@ public record SiteCheckResult(
         @JsonProperty("taskId")
         @JsonAlias("task_id")
         UUID taskId,
-        @JsonAlias({"response", "result", "data", "payload"})
+        @JsonAlias({"response", "result", "data"})
         SiteCheckResponse response
 ) {}
