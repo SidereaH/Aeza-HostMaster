@@ -16,16 +16,16 @@ public class PingCheckDetails {
     private Double packetLossPercentage;
 
     @Column(name = "ping_rtt_min_ms")
-    private Long minimumRttMillis;
+    private Double minimumRttMillis;
 
     @Column(name = "ping_rtt_avg_ms")
-    private Long averageRttMillis;
+    private Double averageRttMillis;
 
     @Column(name = "ping_rtt_max_ms")
-    private Long maximumRttMillis;
+    private Double maximumRttMillis;
 
     @Column(name = "ping_rtt_stddev_ms")
-    private Long standardDeviationRttMillis;
+    private Double standardDeviationRttMillis;
 
     public Integer getPacketsTransmitted() {
         return packetsTransmitted;
@@ -51,35 +51,35 @@ public class PingCheckDetails {
         this.packetLossPercentage = packetLossPercentage;
     }
 
-    public Long getMinimumRttMillis() {
+    public Double getMinimumRttMillis() {
         return minimumRttMillis;
     }
 
-    public void setMinimumRttMillis(Long minimumRttMillis) {
+    public void setMinimumRttMillis(Double minimumRttMillis) {
         this.minimumRttMillis = minimumRttMillis;
     }
 
-    public Long getAverageRttMillis() {
+    public Double getAverageRttMillis() {
         return averageRttMillis;
     }
 
-    public void setAverageRttMillis(Long averageRttMillis) {
+    public void setAverageRttMillis(Double averageRttMillis) {
         this.averageRttMillis = averageRttMillis;
     }
 
-    public Long getMaximumRttMillis() {
+    public Double getMaximumRttMillis() {
         return maximumRttMillis;
     }
 
-    public void setMaximumRttMillis(Long maximumRttMillis) {
+    public void setMaximumRttMillis(Double maximumRttMillis) {
         this.maximumRttMillis = maximumRttMillis;
     }
 
-    public Long getStandardDeviationRttMillis() {
+    public Double getStandardDeviationRttMillis() {
         return standardDeviationRttMillis;
     }
 
-    public void setStandardDeviationRttMillis(Long standardDeviationRttMillis) {
+    public void setStandardDeviationRttMillis(Double standardDeviationRttMillis) {
         this.standardDeviationRttMillis = standardDeviationRttMillis;
     }
 }

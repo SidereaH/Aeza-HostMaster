@@ -13,6 +13,7 @@ import aeza.hostmaster.checks.dto.SiteCheckResult;
 import aeza.hostmaster.checks.web.CheckResultsWebSocketHandler;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.ArrayList;
@@ -101,6 +102,11 @@ public class KafkaSiteCheckService {
             autoStartup = "${app.kafka.agent-listeners-enabled:false}"
     )
     public void handleSiteCheckResult(ConsumerRecord<String, String> record) {
+        if (record.value() == null) {
+            log.debug("Received null check result for key {}", record.key());
+            return;
+        }
+
         JsonNode payload;
         try {
             payload = objectMapper.readTree(record.value());
@@ -110,21 +116,23 @@ public class KafkaSiteCheckService {
             return;
         }
 
-        UUID jobId = resolveJobId(record.key(), payload);
+        JsonNode normalizedPayload = normalizeIncomingPayload(payload);
+
+        UUID jobId = resolveJobId(record.key(), normalizedPayload);
         if (jobId != null) {
-            Object payloadForClient = extractPayloadForClient(payload);
+            Object payloadForClient = extractPayloadForClient(normalizedPayload);
             checkResultsWebSocketHandler.sendResult(jobId, payloadForClient);
         } else {
             log.debug("Unable to resolve job id for check result message with key {}", record.key());
         }
 
-        if (tryProcessAggregatedResult(payload)) {
+        if (tryProcessAggregatedResult(normalizedPayload)) {
             return;
         }
 
-        if (payload.isObject() && payload.hasNonNull("status")) {
+        if (normalizedPayload.isObject() && normalizedPayload.hasNonNull("status")) {
             try {
-                AgentCheckResult agentResult = objectMapper.treeToValue(payload, AgentCheckResult.class);
+                AgentCheckResult agentResult = objectMapper.treeToValue(normalizedPayload, AgentCheckResult.class);
                 processAgentCheckResult(agentResult);
             } catch (JsonProcessingException ex) {
                 log.warn("Failed to map agent check result for key {}: {}", record.key(), ex.getOriginalMessage());
@@ -392,7 +400,7 @@ public class KafkaSiteCheckService {
             }
 
             if (data == null) {
-                for (String candidate : List.of("http", "ping", "dns", "tcp", "traceroute")) {
+                for (String candidate : List.of("payload", "http", "ping", "dns", "tcp", "traceroute")) {
                     JsonNode candidateNode = payload.get(candidate);
                     if (candidateNode != null && !candidateNode.isNull()) {
                         data = candidateNode;
@@ -472,4 +480,118 @@ public class KafkaSiteCheckService {
         }
     }
 
+    private JsonNode normalizeIncomingPayload(JsonNode payload) {
+        if (!(payload instanceof ObjectNode objectNode)) {
+            return payload;
+        }
+
+        ObjectNode normalized = objectNode.deepCopy();
+
+        if (!normalized.hasNonNull("response")) {
+            for (String candidate : List.of("payload", "data", "result")) {
+                JsonNode candidateNode = normalized.get(candidate);
+                if (candidateNode != null && !candidateNode.isNull()) {
+                    normalized.set("response", candidateNode);
+                    break;
+                }
+            }
+        }
+
+        JsonNode responseNode = normalized.get("response");
+        if (responseNode instanceof ObjectNode responseObject) {
+            copyIfAbsent(responseObject, "status", normalized, List.of("status"));
+            copyIfAbsent(responseObject, "executed_at", normalized, List.of("executed_at", "timestamp", "finished_at", "completed_at"));
+            copyIfAbsent(responseObject, "target", normalized, List.of("target", "hostname", "host"));
+
+            if (!responseObject.hasNonNull("checks")) {
+                for (String candidate : List.of("checks", "results", "details")) {
+                    JsonNode candidateNode = responseObject.get(candidate);
+                    if (candidateNode instanceof ArrayNode arrayNode) {
+                        responseObject.set("checks", arrayNode);
+                        break;
+                    }
+                }
+            }
+
+            JsonNode checksNode = responseObject.get("checks");
+            if (checksNode instanceof ArrayNode checksArray) {
+                for (JsonNode checkNode : checksArray) {
+                    if (!(checkNode instanceof ObjectNode checkObject)) {
+                        continue;
+                    }
+
+                    promoteFromSelf(checkObject, "type", List.of("type", "check_type", "name"));
+                    promoteFromSelf(checkObject, "status", List.of("status", "state", "result_status"));
+                    promoteFromSelf(checkObject, "durationMillis", List.of("durationMillis", "duration", "duration_ms", "elapsed_ms"));
+
+                    JsonNode detailNode = firstPresent(checkObject, List.of("result", "details", "payload"));
+                    if (detailNode != null && !detailNode.isNull()) {
+                        String detailField = resolveDetailField(checkObject.path("type").asText(null));
+                        if (detailField != null && !checkObject.hasNonNull(detailField)) {
+                            checkObject.set(detailField, detailNode);
+                        }
+                    }
+                }
+            }
+        }
+
+        return normalized;
+    }
+
+    private void copyIfAbsent(ObjectNode target, String canonicalField, ObjectNode source, List<String> candidates) {
+        if (target.hasNonNull(canonicalField)) {
+            return;
+        }
+
+        for (String candidate : candidates) {
+            JsonNode candidateNode = source.get(candidate);
+            if (candidateNode != null && !candidateNode.isNull()) {
+                target.set(canonicalField, candidateNode);
+                return;
+            }
+        }
+    }
+
+    private void promoteFromSelf(ObjectNode target, String canonicalField, List<String> candidates) {
+        if (target.hasNonNull(canonicalField)) {
+            return;
+        }
+
+        for (String candidate : candidates) {
+            JsonNode candidateNode = target.get(candidate);
+            if (candidateNode != null && !candidateNode.isNull()) {
+                target.set(canonicalField, candidateNode);
+                return;
+            }
+        }
+    }
+
+    private JsonNode firstPresent(ObjectNode target, List<String> fields) {
+        for (String field : fields) {
+            JsonNode node = target.get(field);
+            if (node != null && !node.isNull()) {
+                return node;
+            }
+        }
+        return null;
+    }
+
+    private String resolveDetailField(String rawType) {
+        if (rawType == null || rawType.isBlank()) {
+            return null;
+        }
+
+        CheckType type = CheckType.fromJson(rawType);
+        if (type == null) {
+            return null;
+        }
+
+        return switch (type) {
+            case HTTP -> "http";
+            case PING -> "ping";
+            case TCP, TCP_CONNECT -> "tcp";
+            case DNS_LOOKUP -> "dns";
+            case TRACEROUTE -> "traceroute";
+        };
+    }
 }
