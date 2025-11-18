@@ -6,6 +6,7 @@ import aeza.hostmaster.checks.dto.SiteCheckResponse;
 import aeza.hostmaster.checks.service.KafkaSiteCheckService;
 import aeza.hostmaster.checks.service.SiteCheckSchedulingException;
 import aeza.hostmaster.checks.service.SiteCheckStorageService;
+import aeza.hostmaster.service.CheckResultStore;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -26,17 +27,20 @@ import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/checks")
-@Tag(name = "Site Checks", description = "Operations for scheduling and monitoring site availability checks")
-public class SiteCheckController {
+    @Tag(name = "Site Checks", description = "Operations for scheduling and monitoring site availability checks")
+    public class SiteCheckController {
 
-    private final KafkaSiteCheckService kafkaSiteCheckService;
-    private final SiteCheckStorageService siteCheckStorageService;
+        private final KafkaSiteCheckService kafkaSiteCheckService;
+        private final SiteCheckStorageService siteCheckStorageService;
+        private final CheckResultStore checkResultStore;
 
-    public SiteCheckController(KafkaSiteCheckService kafkaSiteCheckService,
-                               SiteCheckStorageService siteCheckStorageService) {
-        this.kafkaSiteCheckService = kafkaSiteCheckService;
-        this.siteCheckStorageService = siteCheckStorageService;
-    }
+        public SiteCheckController(KafkaSiteCheckService kafkaSiteCheckService,
+                                   SiteCheckStorageService siteCheckStorageService,
+                                   CheckResultStore checkResultStore) {
+            this.kafkaSiteCheckService = kafkaSiteCheckService;
+            this.siteCheckStorageService = siteCheckStorageService;
+            this.checkResultStore = checkResultStore;
+        }
 
     @PostMapping
     @Operation(
@@ -113,9 +117,9 @@ public class SiteCheckController {
                     example = "6f46b7c4-74f4-4388-8f77-5fb547e1f3c9"
             )
             @PathVariable UUID jobId) {
-
-        return siteCheckStorageService.findSiteCheck(jobId)
+        return checkResultStore.find(jobId)
+                .or(() -> siteCheckStorageService.findSiteCheck(jobId))
                 .map(ResponseEntity::ok)
-                .orElseGet(() -> ResponseEntity.notFound().build());
+                .orElseGet(() -> ResponseEntity.status(HttpStatus.ACCEPTED).build());
     }
 }
