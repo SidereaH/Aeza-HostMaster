@@ -317,6 +317,22 @@ public class KafkaSiteCheckService {
             return false;
         }
 
+        SiteCheckResponse mappedResponse = mapResponse(jobId, payload, response);
+        if (mappedResponse != null) {
+            storageService.saveSiteCheck(mappedResponse);
+
+            if (CheckStatus.COMPLETED.equals(mappedResponse.status())) {
+                jobService.completeJob(jobId, mappedResponse);
+                checkResultsWebSocketHandler.completeJob(jobId);
+            } else if (CheckStatus.FAILED.equals(mappedResponse.status())) {
+                jobService.updateJobStatus(jobId, CheckStatus.FAILED);
+            } else if (mappedResponse.status() != null) {
+                jobService.updateJobStatus(jobId, mappedResponse.status());
+            }
+
+            return true;
+        }
+
         List<CheckExecutionResponse> checks = buildChecksFromAgentPayload(response);
         if (checks.isEmpty()) {
             return false;
@@ -336,9 +352,10 @@ public class KafkaSiteCheckService {
             totalDuration = durationNode.asLong();
         }
 
-        CheckStatus status = "success".equalsIgnoreCase(payload.path("status").asText())
-                ? CheckStatus.COMPLETED
-                : CheckStatus.FAILED;
+        CheckStatus status = mapStatus(payload.path("status").asText());
+        if (status == null) {
+            status = CheckStatus.COMPLETED;
+        }
 
         SiteCheckResponse responseDto = new SiteCheckResponse(
                 jobId,
@@ -350,9 +367,53 @@ public class KafkaSiteCheckService {
         );
 
         storageService.saveSiteCheck(responseDto);
-        jobService.completeJob(jobId, responseDto);
-        checkResultsWebSocketHandler.completeJob(jobId);
+        if (CheckStatus.COMPLETED.equals(status)) {
+            jobService.completeJob(jobId, responseDto);
+            checkResultsWebSocketHandler.completeJob(jobId);
+        } else {
+            jobService.updateJobStatus(jobId, status);
+        }
         return true;
+    }
+
+    private SiteCheckResponse mapResponse(UUID jobId, JsonNode payload, ObjectNode response) {
+        try {
+            SiteCheckResponse responseDto = objectMapper.treeToValue(response, SiteCheckResponse.class);
+            if (responseDto == null) {
+                return null;
+            }
+
+            Instant executedAt = responseDto.executedAt();
+            if (executedAt == null) {
+                executedAt = parseInstant(payload.get("executed_at"));
+            }
+            if (executedAt == null) {
+                executedAt = parseInstant(payload.get("timestamp"));
+            }
+            if (executedAt == null) {
+                executedAt = Instant.now();
+            }
+
+            CheckStatus status = responseDto.status();
+            if (status == null) {
+                status = mapStatus(payload.path("status").asText());
+            }
+            if (status == null) {
+                status = CheckStatus.COMPLETED;
+            }
+
+            return new SiteCheckResponse(
+                    responseDto.id() != null ? responseDto.id() : jobId,
+                    responseDto.target(),
+                    executedAt,
+                    status,
+                    responseDto.totalDurationMillis(),
+                    responseDto.checks()
+            );
+        } catch (JsonProcessingException ex) {
+            log.debug("Failed to map agent payload to SiteCheckResponse for job {}: {}", jobId, ex.getOriginalMessage());
+            return null;
+        }
     }
 
     private List<CheckExecutionResponse> buildChecksFromAgentPayload(ObjectNode response) {
@@ -445,6 +506,10 @@ public class KafkaSiteCheckService {
             log.debug("Unable to parse instant from {}", value.asText());
             return null;
         }
+    }
+
+    private CheckStatus mapStatus(String statusText) {
+        return CheckStatus.fromJson(statusText);
     }
 
     private SiteCheckResponse normalizeAggregatedResponse(SiteCheckResult result) {
