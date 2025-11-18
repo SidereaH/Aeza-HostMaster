@@ -312,8 +312,16 @@ public class KafkaSiteCheckService {
     }
 
     private boolean tryPersistAgentPayload(JsonNode payload, UUID jobId) {
+        ObjectNode response = null;
+
         JsonNode responseNode = payload.get("response");
-        if (!(responseNode instanceof ObjectNode response)) {
+        if (responseNode instanceof ObjectNode responseObject) {
+            response = responseObject;
+        } else if (payload instanceof ObjectNode payloadObject) {
+            response = payloadObject;
+        }
+
+        if (response == null) {
             return false;
         }
 
