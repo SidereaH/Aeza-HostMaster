@@ -87,7 +87,7 @@ public class KafkaSiteCheckService {
             jobService.updateJobStatus(job.jobId(), CheckStatus.IN_PROGRESS);
         } catch (Exception e) {
             jobService.updateJobStatus(job.jobId(), CheckStatus.FAILED);
-            throw new RuntimeException("Failed to send site check task to Kafka", e);
+            throw new SiteCheckSchedulingException("Failed to send site check task to Kafka", e);
         }
 
         return job;
