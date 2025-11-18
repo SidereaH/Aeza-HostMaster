@@ -2,8 +2,10 @@ package aeza.hostmaster.checks.web;
 
 import aeza.hostmaster.checks.dto.CheckJobResponse;
 import aeza.hostmaster.checks.dto.SiteCheckCreateRequest;
+import aeza.hostmaster.checks.dto.SiteCheckResponse;
 import aeza.hostmaster.checks.service.KafkaSiteCheckService;
 import aeza.hostmaster.checks.service.SiteCheckSchedulingException;
+import aeza.hostmaster.checks.service.SiteCheckStorageService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -28,9 +30,12 @@ import java.util.UUID;
 public class SiteCheckController {
 
     private final KafkaSiteCheckService kafkaSiteCheckService;
+    private final SiteCheckStorageService siteCheckStorageService;
 
-    public SiteCheckController(KafkaSiteCheckService kafkaSiteCheckService) {
+    public SiteCheckController(KafkaSiteCheckService kafkaSiteCheckService,
+                               SiteCheckStorageService siteCheckStorageService) {
         this.kafkaSiteCheckService = kafkaSiteCheckService;
+        this.siteCheckStorageService = siteCheckStorageService;
     }
 
     @PostMapping
@@ -85,5 +90,32 @@ public class SiteCheckController {
             @PathVariable UUID jobId) {
         CheckJobResponse job = kafkaSiteCheckService.getJobStatus(jobId);
         return ResponseEntity.ok(job);
+    }
+
+    @GetMapping("/{jobId}/result")
+    @Operation(
+            summary = "Fetch the stored result of a site check",
+            description = "Returns the last persisted result payload for the given job, if it has been received from Kafka.")
+    @ApiResponses({
+            @ApiResponse(
+                    responseCode = "200",
+                    description = "Result retrieved successfully",
+                    content = @Content(schema = @Schema(implementation = SiteCheckResponse.class))
+            ),
+            @ApiResponse(responseCode = "404", description = "No result is available for the specified job"),
+            @ApiResponse(responseCode = "401", description = "Authentication is required to access this endpoint")
+    })
+    public ResponseEntity<SiteCheckResponse> getCheckResult(
+            @Parameter(
+                    description = "Identifier of the job whose stored result should be returned",
+                    required = true,
+                    schema = @Schema(implementation = UUID.class, format = "uuid"),
+                    example = "6f46b7c4-74f4-4388-8f77-5fb547e1f3c9"
+            )
+            @PathVariable UUID jobId) {
+
+        return siteCheckStorageService.findSiteCheck(jobId)
+                .map(ResponseEntity::ok)
+                .orElseGet(() -> ResponseEntity.notFound().build());
     }
 }
