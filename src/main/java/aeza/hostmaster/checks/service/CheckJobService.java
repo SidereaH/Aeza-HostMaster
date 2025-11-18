@@ -96,6 +96,6 @@ public class CheckJobService {
                         job.getExecutedAt(), job.getFinishedAt(),
                         job.getTotalDurationMillis(), null
                 ))
-                .orElseThrow(() -> new RuntimeException("Job not found: " + jobId));
+                .orElseThrow(() -> new CheckJobNotFoundException(jobId));
     }
 }
