@@ -93,8 +93,9 @@ public class SiteCheckStorageService {
             }
 
             // Сохраняем metrics если есть
-            if (check.metrics() != null && !check.metrics().isEmpty()) {
-                check.metrics().forEach(metricDto -> {
+            List<CheckMetricDto> metrics = mergeWithPingMetrics(check);
+            if (!metrics.isEmpty()) {
+                metrics.forEach(metricDto -> {
                     CheckMetricEntity metric = new CheckMetricEntity();
                     metric.setId(UUID.randomUUID());
                     metric.setName(metricDto.name());
