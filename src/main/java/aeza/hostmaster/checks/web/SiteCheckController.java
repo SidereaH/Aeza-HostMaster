@@ -3,6 +3,7 @@ package aeza.hostmaster.checks.web;
 import aeza.hostmaster.checks.dto.CheckJobResponse;
 import aeza.hostmaster.checks.dto.SiteCheckCreateRequest;
 import aeza.hostmaster.checks.service.KafkaSiteCheckService;
+import aeza.hostmaster.checks.service.SiteCheckSchedulingException;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -10,6 +11,7 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -52,8 +54,12 @@ public class SiteCheckController {
             )
             @RequestBody SiteCheckCreateRequest request) {
 
-        CheckJobResponse job = kafkaSiteCheckService.createSiteCheckJob(request); // Передаем весь request
-        return ResponseEntity.accepted().body(job);
+        try {
+            CheckJobResponse job = kafkaSiteCheckService.createSiteCheckJob(request);
+            return ResponseEntity.accepted().body(job);
+        } catch (SiteCheckSchedulingException ex) {
+            return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).build();
+        }
     }
 
     @GetMapping("/{jobId}")
