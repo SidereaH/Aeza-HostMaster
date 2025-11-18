@@ -7,21 +7,19 @@ import java.util.concurrent.ConcurrentMap;
 
 import org.springframework.stereotype.Component;
 
-import aeza.hostmaster.checks.dto.SiteCheckResponse;
-
 /**
  * Thread-safe in-memory storage for results that arrive from Kafka.
  */
 @Component
 public class CheckResultStore {
 
-    private final ConcurrentMap<UUID, SiteCheckResponse> results = new ConcurrentHashMap<>();
+    private final ConcurrentMap<UUID, String> results = new ConcurrentHashMap<>();
 
-    public void store(UUID checkId, SiteCheckResponse payload) {
+    public void store(UUID checkId, String payload) {
         results.put(checkId, payload);
     }
 
-    public Optional<SiteCheckResponse> find(UUID checkId) {
+    public Optional<String> find(UUID checkId) {
         return Optional.ofNullable(results.get(checkId));
     }
 }

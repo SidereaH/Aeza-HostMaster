@@ -9,10 +9,6 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Component;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
-
-import aeza.hostmaster.checks.dto.SiteCheckResponse;
 import aeza.hostmaster.service.CheckResultStore;
 
 /**
@@ -25,11 +21,9 @@ public class CheckResultListener {
     private static final Logger log = LoggerFactory.getLogger(CheckResultListener.class);
 
     private final CheckResultStore store;
-    private final ObjectMapper objectMapper;
 
-    public CheckResultListener(CheckResultStore store, ObjectMapper objectMapper) {
+    public CheckResultListener(CheckResultStore store) {
         this.store = store;
-        this.objectMapper = objectMapper;
     }
 
     @KafkaListener(topics = "${app.kafka.results-topic:checks-results}")
@@ -44,13 +38,10 @@ public class CheckResultListener {
 
         try {
             UUID checkId = UUID.fromString(key);
-            SiteCheckResponse response = objectMapper.readValue(record.value(), SiteCheckResponse.class);
-            store.store(checkId, response);
+            store.store(checkId, record.value());
             log.info("Stored result for check {} from Kafka topic {}", checkId, record.topic());
         } catch (IllegalArgumentException ex) {
             log.warn("Received Kafka result with non-UUID key '{}', skipping", key);
-        } catch (JsonProcessingException ex) {
-            log.warn("Failed to deserialize Kafka result for key {}: {}", key, ex.getMessage());
         }
     }
 }
