@@ -402,21 +402,13 @@ public class KafkaSiteCheckService {
                 status = CheckStatus.COMPLETED;
             }
 
-            List<CheckExecutionResponse> checks = responseDto.checks();
-            if ((checks == null || checks.isEmpty()) && response != null) {
-                List<CheckExecutionResponse> derivedChecks = buildChecksFromAgentPayload(response);
-                if (!derivedChecks.isEmpty()) {
-                    checks = derivedChecks;
-                }
-            }
-
             return new SiteCheckResponse(
                     responseDto.id() != null ? responseDto.id() : jobId,
                     responseDto.target(),
                     executedAt,
                     status,
                     responseDto.totalDurationMillis(),
-                    checks
+                    responseDto.checks()
             );
         } catch (JsonProcessingException ex) {
             log.debug("Failed to map agent payload to SiteCheckResponse for job {}: {}", jobId, ex.getOriginalMessage());
