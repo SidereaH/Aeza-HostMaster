@@ -1,7 +1,10 @@
 package aeza.hostmaster.checks.service;
 
 import aeza.hostmaster.checks.domain.CheckStatus;
+import aeza.hostmaster.checks.domain.CheckType;
 import aeza.hostmaster.checks.dto.CheckExecutionResponse;
+import aeza.hostmaster.checks.dto.CheckMetricDto;
+import aeza.hostmaster.checks.dto.HttpCheckDetailsDto;
 import aeza.hostmaster.checks.dto.SiteCheckResponse;
 import aeza.hostmaster.checks.entity.*;
 import aeza.hostmaster.checks.repository.SiteCheckRepository;
@@ -10,7 +13,9 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @Service
 public class SiteCheckStorageService {
@@ -19,6 +24,11 @@ public class SiteCheckStorageService {
 
     public SiteCheckStorageService(SiteCheckRepository siteCheckRepository) {
         this.siteCheckRepository = siteCheckRepository;
+    }
+
+    @Transactional(readOnly = true)
+    public Optional<SiteCheckResponse> findSiteCheck(UUID id) {
+        return siteCheckRepository.findById(id).map(this::mapToResponse);
     }
 
     @Transactional
@@ -99,5 +109,57 @@ public class SiteCheckStorageService {
         });
 
         siteCheckRepository.save(siteCheck);
+    }
+
+    private SiteCheckResponse mapToResponse(SiteCheckEntity entity) {
+        List<CheckExecutionResponse> checks = entity.getChecks().stream()
+                .map(this::mapExecution)
+                .collect(Collectors.toList());
+
+        return new SiteCheckResponse(
+                entity.getId(),
+                entity.getTarget(),
+                entity.getExecutedAt(),
+                entity.getStatus(),
+                entity.getTotalDurationMillis(),
+                checks
+        );
+    }
+
+    private CheckExecutionResponse mapExecution(CheckExecutionEntity entity) {
+        return new CheckExecutionResponse(
+                entity.getId(),
+                entity.getType(),
+                entity.getStatus(),
+                entity.getDurationMillis(),
+                entity.getMessage(),
+                mapHttp(entity),
+                null,
+                null,
+                null,
+                null,
+                entity.getMetrics().stream()
+                        .map(metric -> new CheckMetricDto(
+                                metric.getName(),
+                                metric.getValue(),
+                                metric.getUnit(),
+                                metric.getDescription()
+                        ))
+                        .collect(Collectors.toList())
+        );
+    }
+
+    private HttpCheckDetailsDto mapHttp(CheckExecutionEntity entity) {
+        if (!CheckType.HTTP.equals(entity.getType()) || entity.getHttpDetails() == null) {
+            return null;
+        }
+
+        HttpDetailsEntity details = entity.getHttpDetails();
+        return new HttpCheckDetailsDto(
+                details.getMethod(),
+                details.getStatusCode(),
+                details.getResponseTimeMillis(),
+                details.getHeaders()
+        );
     }
 }
