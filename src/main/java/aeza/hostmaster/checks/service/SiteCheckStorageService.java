@@ -5,6 +5,7 @@ import aeza.hostmaster.checks.domain.CheckType;
 import aeza.hostmaster.checks.dto.CheckExecutionResponse;
 import aeza.hostmaster.checks.dto.CheckMetricDto;
 import aeza.hostmaster.checks.dto.HttpCheckDetailsDto;
+import aeza.hostmaster.checks.dto.PingCheckDetailsDto;
 import aeza.hostmaster.checks.dto.SiteCheckResponse;
 import aeza.hostmaster.checks.entity.*;
 import aeza.hostmaster.checks.repository.SiteCheckRepository;
@@ -14,6 +15,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -111,6 +113,41 @@ public class SiteCheckStorageService {
         });
 
         siteCheckRepository.save(siteCheck);
+    }
+
+    private List<CheckMetricDto> mergeWithPingMetrics(CheckExecutionResponse check) {
+        LinkedHashMap<String, CheckMetricDto> merged = new LinkedHashMap<>();
+
+        if (check.metrics() != null) {
+            check.metrics().stream()
+                    .filter(Objects::nonNull)
+                    .forEach(metric -> merged.put(metric.name(), metric));
+        }
+
+        if (CheckType.PING.equals(check.type()) && check.pingDetails() != null) {
+            PingCheckDetailsDto pingDetails = check.pingDetails();
+            addMetric(merged, "packets_transmitted", pingDetails.packetsTransmitted(), null, "Ping packets transmitted");
+            addMetric(merged, "packets_received", pingDetails.packetsReceived(), null, "Ping packets received");
+            addMetric(merged, "packet_loss_pct", pingDetails.packetLossPercentage(), "%", "Ping packet loss percentage");
+            addMetric(merged, "rtt_min_ms", pingDetails.minimumRttMillis(), "ms", "Ping minimum round-trip time");
+            addMetric(merged, "rtt_avg_ms", pingDetails.averageRttMillis(), "ms", "Ping average round-trip time");
+            addMetric(merged, "rtt_max_ms", pingDetails.maximumRttMillis(), "ms", "Ping maximum round-trip time");
+            addMetric(merged, "rtt_stddev_ms", pingDetails.standardDeviationRttMillis(), "ms", "Ping RTT standard deviation");
+        }
+
+        return merged.values().stream().toList();
+    }
+
+    private void addMetric(LinkedHashMap<String, CheckMetricDto> metrics,
+                           String name,
+                           Number value,
+                           String unit,
+                           String description) {
+        if (value == null) {
+            return;
+        }
+
+        metrics.putIfAbsent(name, new CheckMetricDto(name, value.doubleValue(), unit, description));
     }
 
     private SiteCheckResponse mapToResponse(SiteCheckEntity entity) {
