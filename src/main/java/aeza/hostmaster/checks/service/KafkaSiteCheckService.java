@@ -7,6 +7,7 @@ import aeza.hostmaster.checks.dto.AgentTaskMessage;
 import aeza.hostmaster.checks.dto.CheckExecutionResponse;
 import aeza.hostmaster.checks.dto.CheckJobResponse;
 import aeza.hostmaster.checks.dto.CheckMetricDto;
+import aeza.hostmaster.checks.dto.PingCheckDetailsDto;
 import aeza.hostmaster.checks.dto.SiteCheckCreateRequest;
 import aeza.hostmaster.checks.dto.SiteCheckResponse;
 import aeza.hostmaster.checks.dto.SiteCheckResult;
@@ -122,6 +123,9 @@ public class KafkaSiteCheckService {
         if (jobId != null) {
             Object payloadForClient = extractPayloadForClient(normalizedPayload);
             checkResultsWebSocketHandler.sendResult(jobId, payloadForClient);
+            if (tryPersistAgentPayload(normalizedPayload, jobId)) {
+                return;
+            }
         } else {
             log.debug("Unable to resolve job id for check result message with key {}", record.key());
         }
@@ -304,6 +308,142 @@ public class KafkaSiteCheckService {
         } catch (JsonProcessingException ex) {
             log.debug("Message is not an aggregated site check result: {}", ex.getOriginalMessage());
             return false;
+        }
+    }
+
+    private boolean tryPersistAgentPayload(JsonNode payload, UUID jobId) {
+        JsonNode responseNode = payload.get("response");
+        if (!(responseNode instanceof ObjectNode response)) {
+            return false;
+        }
+
+        List<CheckExecutionResponse> checks = buildChecksFromAgentPayload(response);
+        if (checks.isEmpty()) {
+            return false;
+        }
+
+        Instant executedAt = parseInstant(payload.get("executed_at"));
+        if (executedAt == null) {
+            executedAt = parseInstant(payload.get("timestamp"));
+        }
+        if (executedAt == null) {
+            executedAt = Instant.now();
+        }
+
+        Long totalDuration = null;
+        JsonNode durationNode = payload.get("duration");
+        if (durationNode != null && durationNode.canConvertToLong()) {
+            totalDuration = durationNode.asLong();
+        }
+
+        CheckStatus status = "success".equalsIgnoreCase(payload.path("status").asText())
+                ? CheckStatus.COMPLETED
+                : CheckStatus.FAILED;
+
+        SiteCheckResponse responseDto = new SiteCheckResponse(
+                jobId,
+                null,
+                executedAt,
+                status,
+                totalDuration,
+                checks
+        );
+
+        storageService.saveSiteCheck(responseDto);
+        jobService.completeJob(jobId, responseDto);
+        checkResultsWebSocketHandler.completeJob(jobId);
+        return true;
+    }
+
+    private List<CheckExecutionResponse> buildChecksFromAgentPayload(ObjectNode response) {
+        List<CheckExecutionResponse> checks = new ArrayList<>();
+
+        JsonNode pingNode = response.get("ping");
+        if (pingNode != null) {
+            PingCheckDetailsDto pingDetails = mapPingDetails(pingNode);
+            if (pingDetails != null) {
+                checks.add(new CheckExecutionResponse(
+                        UUID.randomUUID(),
+                        CheckType.PING,
+                        CheckStatus.OK,
+                        null,
+                        null,
+                        null,
+                        pingDetails,
+                        null,
+                        null,
+                        null,
+                        List.of()
+                ));
+            }
+        }
+
+        return checks;
+    }
+
+    private PingCheckDetailsDto mapPingDetails(JsonNode pingNode) {
+        JsonNode sourceNode = pingNode.isArray() && pingNode.size() > 0 ? pingNode.get(0) : pingNode;
+        if (!(sourceNode instanceof ObjectNode source)) {
+            return null;
+        }
+
+        JsonNode packets = source.get("packets");
+        JsonNode roundTrip = source.get("roundTrip");
+
+        Integer sent = packets != null && packets.hasNonNull("transmitted")
+                ? packets.get("transmitted").asInt()
+                : null;
+        Integer received = packets != null && packets.hasNonNull("received")
+                ? packets.get("received").asInt()
+                : null;
+        Double loss = packets != null ? parsePercentage(packets.get("loss")) : null;
+
+        Double min = roundTrip != null ? parseMillis(roundTrip.get("min")) : null;
+        Double avg = roundTrip != null ? parseMillis(roundTrip.get("avg")) : null;
+        Double max = roundTrip != null ? parseMillis(roundTrip.get("max")) : null;
+
+        return new PingCheckDetailsDto(sent, received, loss, min, avg, max, null);
+    }
+
+    private Double parsePercentage(JsonNode value) {
+        if (value == null || value.isNull()) {
+            return null;
+        }
+
+        String text = value.asText();
+        try {
+            return Double.parseDouble(text.replace("%", ""));
+        } catch (NumberFormatException ex) {
+            log.debug("Unable to parse percentage from {}", text);
+            return null;
+        }
+    }
+
+    private Double parseMillis(JsonNode value) {
+        if (value == null || value.isNull()) {
+            return null;
+        }
+
+        String text = value.asText();
+        text = text.replace("ms", "").trim();
+        try {
+            return Double.parseDouble(text);
+        } catch (NumberFormatException ex) {
+            log.debug("Unable to parse millis from {}", text);
+            return null;
+        }
+    }
+
+    private Instant parseInstant(JsonNode value) {
+        if (value == null || value.isNull()) {
+            return null;
+        }
+
+        try {
+            return Instant.parse(value.asText());
+        } catch (Exception ex) {
+            log.debug("Unable to parse instant from {}", value.asText());
+            return null;
         }
     }
 
