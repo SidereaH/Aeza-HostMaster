@@ -17,11 +17,14 @@ public class CheckJobService {
 
     private final SiteCheckRepository siteCheckRepository;
     private final SimpMessagingTemplate messagingTemplate;
+    private final SiteCheckStorageService siteCheckStorageService;
 
     public CheckJobService(SiteCheckRepository siteCheckRepository,
-                           SimpMessagingTemplate messagingTemplate) {
+                           SimpMessagingTemplate messagingTemplate,
+                           SiteCheckStorageService siteCheckStorageService) {
         this.siteCheckRepository = siteCheckRepository;
         this.messagingTemplate = messagingTemplate;
+        this.siteCheckStorageService = siteCheckStorageService;
     }
 
     @Transactional
@@ -89,12 +92,17 @@ public class CheckJobService {
         messagingTemplate.convertAndSend("/topic/jobs/" + jobId, message);
     }
 
+    @Transactional(readOnly = true)
     public CheckJobResponse getJobStatus(UUID jobId) {
         return siteCheckRepository.findById(jobId)
                 .map(job -> new CheckJobResponse(
-                        job.getId(), job.getTarget(), job.getStatus(),
-                        job.getExecutedAt(), job.getFinishedAt(),
-                        job.getTotalDurationMillis(), null
+                        job.getId(),
+                        job.getTarget(),
+                        job.getStatus(),
+                        job.getExecutedAt(),
+                        job.getFinishedAt(),
+                        job.getTotalDurationMillis(),
+                        siteCheckStorageService.findSiteCheck(jobId).orElse(null)
                 ))
                 .orElseThrow(() -> new CheckJobNotFoundException(jobId));
     }
