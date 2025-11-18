@@ -5,7 +5,6 @@ import aeza.hostmaster.checks.domain.CheckType;
 import aeza.hostmaster.checks.dto.CheckExecutionResponse;
 import aeza.hostmaster.checks.dto.CheckMetricDto;
 import aeza.hostmaster.checks.dto.HttpCheckDetailsDto;
-import aeza.hostmaster.checks.dto.PingCheckDetailsDto;
 import aeza.hostmaster.checks.dto.SiteCheckResponse;
 import aeza.hostmaster.checks.entity.*;
 import aeza.hostmaster.checks.repository.SiteCheckRepository;
@@ -15,7 +14,6 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -138,7 +136,7 @@ public class SiteCheckStorageService {
                 entity.getDurationMillis(),
                 entity.getMessage(),
                 mapHttp(entity),
-                extractPing(entity.getMetrics()),
+                null,
                 null,
                 null,
                 null,
@@ -151,69 +149,6 @@ public class SiteCheckStorageService {
                         ))
                         .collect(Collectors.toList())
         );
-    }
-
-    private List<CheckMetricDto> mergeWithPingMetrics(CheckExecutionResponse check) {
-        Map<String, CheckMetricDto> merged = new LinkedHashMap<>();
-
-        if (check.metrics() != null) {
-            check.metrics().forEach(metric -> merged.put(metric.name(), metric));
-        }
-
-        if (check.pingDetails() != null) {
-            PingCheckDetailsDto ping = check.pingDetails();
-            merged.put("ping.packets.transmitted", new CheckMetricDto("ping.packets.transmitted", asDouble(ping.packetsTransmitted()), null, null));
-            merged.put("ping.packets.received", new CheckMetricDto("ping.packets.received", asDouble(ping.packetsReceived()), null, null));
-            merged.put("ping.packets.loss", new CheckMetricDto("ping.packets.loss", ping.packetLossPercentage(), "%", null));
-            merged.put("ping.rtt.min", new CheckMetricDto("ping.rtt.min", ping.minimumRttMillis(), "ms", null));
-            merged.put("ping.rtt.avg", new CheckMetricDto("ping.rtt.avg", ping.averageRttMillis(), "ms", null));
-            merged.put("ping.rtt.max", new CheckMetricDto("ping.rtt.max", ping.maximumRttMillis(), "ms", null));
-            merged.put("ping.rtt.stddev", new CheckMetricDto("ping.rtt.stddev", ping.standardDeviationRttMillis(), "ms", null));
-        }
-
-        return merged.values().stream()
-                .filter(metric -> metric.value() != null)
-                .collect(Collectors.toList());
-    }
-
-    private PingCheckDetailsDto extractPing(List<CheckMetricEntity> metrics) {
-        if (metrics == null || metrics.isEmpty()) {
-            return null;
-        }
-
-        Double transmitted = findMetricValue(metrics, "ping.packets.transmitted");
-        Double received = findMetricValue(metrics, "ping.packets.received");
-        Double loss = findMetricValue(metrics, "ping.packets.loss");
-        Double min = findMetricValue(metrics, "ping.rtt.min");
-        Double avg = findMetricValue(metrics, "ping.rtt.avg");
-        Double max = findMetricValue(metrics, "ping.rtt.max");
-        Double stddev = findMetricValue(metrics, "ping.rtt.stddev");
-
-        if (transmitted == null && received == null && loss == null && min == null && avg == null && max == null && stddev == null) {
-            return null;
-        }
-
-        return new PingCheckDetailsDto(
-                transmitted != null ? transmitted.intValue() : null,
-                received != null ? received.intValue() : null,
-                loss,
-                min,
-                avg,
-                max,
-                stddev
-        );
-    }
-
-    private Double findMetricValue(List<CheckMetricEntity> metrics, String name) {
-        return metrics.stream()
-                .filter(metric -> name.equals(metric.getName()))
-                .map(CheckMetricEntity::getValue)
-                .findFirst()
-                .orElse(null);
-    }
-
-    private Double asDouble(Integer value) {
-        return value == null ? null : value.doubleValue();
     }
 
     private HttpCheckDetailsDto mapHttp(CheckExecutionEntity entity) {
