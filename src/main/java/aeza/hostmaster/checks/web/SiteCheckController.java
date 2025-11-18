@@ -52,7 +52,7 @@ public class SiteCheckController {
             )
             @RequestBody SiteCheckCreateRequest request) {
 
-        CheckJobResponse job = kafkaSiteCheckService.createSiteCheckJob(request); // Передаем весь request
+        CheckJobResponse job = kafkaSiteCheckService.createSiteCheckJob(request);
         return ResponseEntity.accepted().body(job);
     }
 
@@ -77,11 +77,7 @@ public class SiteCheckController {
                     example = "6f46b7c4-74f4-4388-8f77-5fb547e1f3c9"
             )
             @PathVariable UUID jobId) {
-        try {
-            CheckJobResponse job = kafkaSiteCheckService.getJobStatus(jobId);
-            return ResponseEntity.ok(job);
-        } catch (RuntimeException e) {
-            return ResponseEntity.notFound().build();
-        }
+        CheckJobResponse job = kafkaSiteCheckService.getJobStatus(jobId);
+        return ResponseEntity.ok(job);
     }
 }
