@@ -23,18 +23,18 @@ import java.util.UUID;
 import java.time.Instant;
 import java.util.HashMap;
 import java.util.Objects;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
+import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
+import org.apache.kafka.clients.producer.RecordMetadata;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.kafka.core.KafkaTemplate;
+import org.springframework.kafka.support.SendResult;
 import org.springframework.stereotype.Service;
 
 @Service
@@ -187,16 +187,21 @@ public class KafkaSiteCheckService {
 
     private void sendTaskMessage(CheckType checkType, UUID jobId, String payload) {
         String topic = resolveTopic(checkType);
-        try {
-            var result = kafkaTemplate.send(topic, jobId.toString(), payload).get(5, TimeUnit.SECONDS);
-            var md = result.getRecordMetadata();
-            log.info("Sent to topic={} partition={} offset={} key={}", md.topic(), md.partition(), md.offset(), jobId);
-        } catch (InterruptedException ex) {
-            Thread.currentThread().interrupt();
-            throw new RuntimeException("Interrupted while sending task message to Kafka", ex);
-        } catch (ExecutionException | TimeoutException ex) {
-            throw new RuntimeException("Failed to deliver task message to Kafka", ex);
-        }
+
+        CompletableFuture<SendResult<String, String>> future = kafkaTemplate.send(topic, jobId.toString(), payload);
+        future.whenComplete((result, ex) -> {
+            if (ex != null) {
+                log.error("Failed to deliver task message to Kafka for job {}: {}", jobId, ex.getMessage());
+                jobService.updateJobStatus(jobId, CheckStatus.FAILED);
+                checkResultsWebSocketHandler.completeJob(jobId);
+                return;
+            }
+
+            if (result != null) {
+                RecordMetadata md = result.getRecordMetadata();
+                log.info("Sent to topic={} partition={} offset={} key={}", md.topic(), md.partition(), md.offset(), jobId);
+            }
+        });
     }
 
 
