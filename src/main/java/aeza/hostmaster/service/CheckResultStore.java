@@ -1,5 +1,6 @@
 package aeza.hostmaster.service;
 
+import aeza.hostmaster.checks.dto.SiteCheckResponse;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -13,13 +14,13 @@ import org.springframework.stereotype.Component;
 @Component
 public class CheckResultStore {
 
-    private final ConcurrentMap<UUID, String> results = new ConcurrentHashMap<>();
+    private final ConcurrentMap<UUID, SiteCheckResponse> results = new ConcurrentHashMap<>();
 
-    public void store(UUID checkId, String payload) {
+    public void store(UUID checkId, SiteCheckResponse payload) {
         results.put(checkId, payload);
     }
 
-    public Optional<String> find(UUID checkId) {
+    public Optional<SiteCheckResponse> find(UUID checkId) {
         return Optional.ofNullable(results.get(checkId));
     }
 }
