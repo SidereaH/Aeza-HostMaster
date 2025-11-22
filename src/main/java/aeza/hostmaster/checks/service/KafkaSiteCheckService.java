@@ -54,7 +54,6 @@ public class KafkaSiteCheckService {
 
     private static final String AGENT_TASKS_TOPIC = "agent-tasks";
     private static final String AGENT_BROADCAST_TASKS_TOPIC = "agent-tasks-ping";
-    private static final String CHECK_RESULTS_TOPIC = "check-results";
     private static final String AGENT_LOGS_TOPIC = "agent-logs";
 
     public KafkaSiteCheckService(KafkaTemplate<String, String> kafkaTemplate,
@@ -99,7 +98,7 @@ public class KafkaSiteCheckService {
     }
 
     @KafkaListener(
-            topics = CHECK_RESULTS_TOPIC,
+            topics = "${app.kafka.results-topic:checks-results}",
             autoStartup = "${app.kafka.agent-listeners-enabled:false}"
     )
     public void handleSiteCheckResult(ConsumerRecord<String, String> record) {
