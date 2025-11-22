@@ -409,13 +409,26 @@ public class KafkaSiteCheckService {
                 status = CheckStatus.COMPLETED;
             }
 
+            List<CheckExecutionResponse> checks = responseDto.checks();
+            if (checks == null || checks.isEmpty()) {
+                checks = buildChecksFromAgentPayload(response);
+            }
+
+            Long totalDuration = responseDto.totalDurationMillis();
+            if (totalDuration == null) {
+                JsonNode durationNode = payload.get("duration");
+                if (durationNode != null && durationNode.canConvertToLong()) {
+                    totalDuration = durationNode.asLong();
+                }
+            }
+
             return new SiteCheckResponse(
                     responseDto.id() != null ? responseDto.id() : jobId,
                     responseDto.target(),
                     executedAt,
                     status,
-                    responseDto.totalDurationMillis(),
-                    responseDto.checks()
+                    totalDuration,
+                    checks
             );
         } catch (JsonProcessingException ex) {
             log.debug("Failed to map agent payload to SiteCheckResponse for job {}: {}", jobId, ex.getOriginalMessage());
