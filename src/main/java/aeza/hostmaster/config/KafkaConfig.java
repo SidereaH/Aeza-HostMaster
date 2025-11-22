@@ -19,6 +19,9 @@ public class KafkaConfig {
     @Value("${spring.kafka.bootstrap-servers}")
     private String bootstrapServers;
 
+    @Value("${app.kafka.results-topic:checks-results}")
+    private String checkResultsTopicName;
+
     @Bean
     public AdminClient adminClient() {
         Map<String, Object> configs = new HashMap<>();
@@ -53,7 +56,7 @@ public class KafkaConfig {
 
     @Bean
     public NewTopic checkResultsTopic() {
-        return TopicBuilder.name("check-results")
+        return TopicBuilder.name(checkResultsTopicName)
                 .partitions(3)
                 .replicas(1)
                 .build();

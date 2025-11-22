@@ -30,7 +30,10 @@ public class CheckResultListener {
         this.objectMapper = objectMapper;
     }
 
-    @KafkaListener(topics = "${app.kafka.results-topic:checks-results}")
+    @KafkaListener(
+            topics = "${app.kafka.results-topic:checks-results}",
+            groupId = "${app.kafka.result-cache-group:hostmaster-results-cache}"
+    )
     public void onResult(ConsumerRecord<String, String> record) {
         String key = record.key();
 
