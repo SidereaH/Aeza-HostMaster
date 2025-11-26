@@ -45,10 +45,27 @@ public class CheckResultListener {
     public void onResult(ConsumerRecord<String, String> record) {
         String key = record.key();
 
-        if (key == null) {
-            log.warn("Received Kafka result without checkId key, skipping: topic={}, partition={}, offset={}",
+        UUID checkId = parseCheckIdFromKey(key);
+
+        SiteCheckResponse response = deserialize(record.value(), checkId);
+        if (response == null) {
+            return;
+        }
+
+        UUID resolvedId = response.id();
+        if (resolvedId == null) {
+            log.warn("Skipping Kafka result because check id is missing; topic={}, partition={}, offset={}",
                     record.topic(), record.partition(), record.offset());
             return;
+        }
+
+        store.store(resolvedId, response);
+        log.info("Stored result for check {} from Kafka topic {}", resolvedId, record.topic());
+    }
+
+    private UUID parseCheckIdFromKey(String key) {
+        if (key == null) {
+            return null;
         }
 
         try {
@@ -59,7 +76,8 @@ public class CheckResultListener {
                 log.info("Stored result for check {} from Kafka topic {}", checkId, record.topic());
             }
         } catch (IllegalArgumentException ex) {
-            log.warn("Received Kafka result with non-UUID key '{}', skipping", key);
+            log.warn("Received Kafka result with non-UUID key '{}', will try to read id from payload", key);
+            return null;
         }
     }
 
