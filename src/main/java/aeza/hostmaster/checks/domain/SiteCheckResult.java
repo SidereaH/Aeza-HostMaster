@@ -47,6 +47,10 @@ public class SiteCheckResult {
         return id;
     }
 
+    public void setId(UUID id) {
+        this.id = id;
+    }
+
     public String getTarget() {
         return target;
     }
