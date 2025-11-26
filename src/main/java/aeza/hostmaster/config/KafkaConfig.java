@@ -19,7 +19,7 @@ public class KafkaConfig {
     @Value("${spring.kafka.bootstrap-servers}")
     private String bootstrapServers;
 
-    @Value("${app.kafka.results-topic:checks-results}")
+    @Value("${app.kafka.results-topic:check-results}")
     private String checkResultsTopicName;
 
     @Bean
