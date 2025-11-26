@@ -606,7 +606,19 @@ public class KafkaSiteCheckService {
         }
 
         if (payload != null && payload.isObject()) {
-            JsonNode idNode = payload.has("taskId") ? payload.get("taskId") : payload.get("task_id");
+            JsonNode idNode = extractTaskId((ObjectNode) payload);
+            if (idNode == null || idNode.isNull()) {
+                for (String candidate : List.of("response", "payload", "data", "result")) {
+                    JsonNode nested = payload.get(candidate);
+                    if (nested instanceof ObjectNode nestedObject) {
+                        idNode = extractTaskId(nestedObject);
+                        if (idNode != null && !idNode.isNull()) {
+                            break;
+                        }
+                    }
+                }
+            }
+
             if (idNode != null && !idNode.isNull()) {
                 try {
                     return UUID.fromString(idNode.asText());
@@ -616,6 +628,16 @@ public class KafkaSiteCheckService {
             }
         }
 
+        return null;
+    }
+
+    private JsonNode extractTaskId(ObjectNode payload) {
+        for (String field : List.of("taskId", "task_id", "id")) {
+            JsonNode idNode = payload.get(field);
+            if (idNode != null && !idNode.isNull()) {
+                return idNode;
+            }
+        }
         return null;
     }
 
