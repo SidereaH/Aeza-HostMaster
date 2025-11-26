@@ -5,6 +5,8 @@ import aeza.hostmaster.checks.domain.CheckType;
 import aeza.hostmaster.checks.dto.CheckExecutionResponse;
 import aeza.hostmaster.checks.dto.PingCheckDetailsDto;
 import aeza.hostmaster.checks.dto.SiteCheckResponse;
+import aeza.hostmaster.checks.service.CheckJobService;
+import aeza.hostmaster.checks.service.SiteCheckStorageService;
 import aeza.hostmaster.service.CheckResultStore;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -32,10 +34,17 @@ public class CheckResultListener {
 
     private final CheckResultStore store;
     private final ObjectMapper objectMapper;
+    private final SiteCheckStorageService storageService;
+    private final CheckJobService jobService;
 
-    public CheckResultListener(CheckResultStore store, ObjectMapper objectMapper) {
+    public CheckResultListener(CheckResultStore store,
+                               ObjectMapper objectMapper,
+                               SiteCheckStorageService storageService,
+                               CheckJobService jobService) {
         this.store = store;
         this.objectMapper = objectMapper;
+        this.storageService = storageService;
+        this.jobService = jobService;
     }
 
     @KafkaListener(
@@ -60,6 +69,14 @@ public class CheckResultListener {
         }
 
         store.store(resolvedId, response);
+        storageService.saveSiteCheck(response);
+
+        if (CheckStatus.COMPLETED.equals(response.status())) {
+            jobService.completeJob(resolvedId, response);
+        } else if (response.status() != null) {
+            jobService.updateJobStatus(resolvedId, response.status());
+        }
+
         log.info("Stored result for check {} from Kafka topic {}", resolvedId, record.topic());
     }
 
@@ -85,6 +102,14 @@ public class CheckResultListener {
             }
 
             SiteCheckResponse mapped = objectMapper.treeToValue(root, SiteCheckResponse.class);
+
+            UUID resolvedId = mapped != null ? mapped.id() : null;
+            if (resolvedId == null) {
+                resolvedId = parseCheckIdFromPayload(objectNode);
+            }
+            if (resolvedId == null) {
+                resolvedId = checkId;
+            }
 
             Instant executedAt = mapped != null ? mapped.executedAt() : null;
             if (executedAt == null) {
@@ -119,7 +144,7 @@ public class CheckResultListener {
             }
 
             return new SiteCheckResponse(
-                    mapped != null && mapped.id() != null ? mapped.id() : checkId,
+                    resolvedId,
                     mapped != null ? mapped.target() : null,
                     executedAt,
                     status,
@@ -215,6 +240,48 @@ public class CheckResultListener {
             return Double.parseDouble(text);
         } catch (NumberFormatException ex) {
             log.debug("Unable to parse millis from {}", text);
+            return null;
+        }
+    }
+
+    private UUID parseCheckIdFromPayload(ObjectNode payload) {
+        UUID id = tryParseUuid(payload.get("taskId"));
+        if (id != null) {
+            return id;
+        }
+
+        id = tryParseUuid(payload.get("task_id"));
+        if (id != null) {
+            return id;
+        }
+
+        id = tryParseUuid(payload.get("id"));
+        if (id != null) {
+            return id;
+        }
+
+        for (String nodeName : List.of("response", "payload", "data", "result")) {
+            JsonNode nested = payload.get(nodeName);
+            if (nested instanceof ObjectNode nestedObject) {
+                id = parseCheckIdFromPayload(nestedObject);
+                if (id != null) {
+                    return id;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    private UUID tryParseUuid(JsonNode node) {
+        if (node == null || node.isNull()) {
+            return null;
+        }
+
+        try {
+            return UUID.fromString(node.asText());
+        } catch (IllegalArgumentException ex) {
+            log.debug("Unable to parse check id from value {}", node.asText());
             return null;
         }
     }
