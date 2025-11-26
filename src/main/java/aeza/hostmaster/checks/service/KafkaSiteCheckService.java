@@ -326,24 +326,11 @@ public class KafkaSiteCheckService {
 
         SiteCheckResponse mappedResponse = mapResponse(jobId, payload, response);
         if (mappedResponse != null) {
-            storageService.saveSiteCheck(mappedResponse);
-
-            if (CheckStatus.COMPLETED.equals(mappedResponse.status())) {
-                jobService.completeJob(jobId, mappedResponse);
-                checkResultsWebSocketHandler.completeJob(jobId);
-            } else if (CheckStatus.FAILED.equals(mappedResponse.status())) {
-                jobService.updateJobStatus(jobId, CheckStatus.FAILED);
-            } else if (mappedResponse.status() != null) {
-                jobService.updateJobStatus(jobId, mappedResponse.status());
-            }
-
+            persistResult(jobId, mappedResponse);
             return true;
         }
 
         List<CheckExecutionResponse> checks = buildChecksFromAgentPayload(response);
-        if (checks.isEmpty()) {
-            return false;
-        }
 
         Instant executedAt = parseInstant(payload.get("executed_at"));
         if (executedAt == null) {
@@ -360,6 +347,9 @@ public class KafkaSiteCheckService {
         }
 
         CheckStatus status = mapStatus(payload.path("status").asText());
+        if (status == null && durationNode == null && checks.isEmpty()) {
+            return false;
+        }
         if (status == null) {
             status = CheckStatus.COMPLETED;
         }
@@ -373,13 +363,7 @@ public class KafkaSiteCheckService {
                 checks
         );
 
-        storageService.saveSiteCheck(responseDto);
-        if (CheckStatus.COMPLETED.equals(status)) {
-            jobService.completeJob(jobId, responseDto);
-            checkResultsWebSocketHandler.completeJob(jobId);
-        } else {
-            jobService.updateJobStatus(jobId, status);
-        }
+        persistResult(jobId, responseDto);
         return true;
     }
 
@@ -541,6 +525,19 @@ public class KafkaSiteCheckService {
         return CheckStatus.fromJson(statusText);
     }
 
+    private void persistResult(UUID jobId, SiteCheckResponse response) {
+        storageService.saveSiteCheck(response);
+
+        if (CheckStatus.COMPLETED.equals(response.status())) {
+            jobService.completeJob(jobId, response);
+            checkResultsWebSocketHandler.completeJob(jobId);
+        } else if (CheckStatus.FAILED.equals(response.status())) {
+            jobService.updateJobStatus(jobId, CheckStatus.FAILED);
+        } else if (response.status() != null) {
+            jobService.updateJobStatus(jobId, response.status());
+        }
+    }
+
     private SiteCheckResponse normalizeAggregatedResponse(SiteCheckResult result) {
         SiteCheckResponse raw = result.response();
 
@@ -606,7 +603,19 @@ public class KafkaSiteCheckService {
         }
 
         if (payload != null && payload.isObject()) {
-            JsonNode idNode = payload.has("taskId") ? payload.get("taskId") : payload.get("task_id");
+            JsonNode idNode = extractTaskId((ObjectNode) payload);
+            if (idNode == null || idNode.isNull()) {
+                for (String candidate : List.of("response", "payload", "data", "result")) {
+                    JsonNode nested = payload.get(candidate);
+                    if (nested instanceof ObjectNode nestedObject) {
+                        idNode = extractTaskId(nestedObject);
+                        if (idNode != null && !idNode.isNull()) {
+                            break;
+                        }
+                    }
+                }
+            }
+
             if (idNode != null && !idNode.isNull()) {
                 try {
                     return UUID.fromString(idNode.asText());
@@ -616,6 +625,16 @@ public class KafkaSiteCheckService {
             }
         }
 
+        return null;
+    }
+
+    private JsonNode extractTaskId(ObjectNode payload) {
+        for (String field : List.of("taskId", "task_id", "id")) {
+            JsonNode idNode = payload.get(field);
+            if (idNode != null && !idNode.isNull()) {
+                return idNode;
+            }
+        }
         return null;
     }
 
