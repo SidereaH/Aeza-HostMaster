@@ -69,14 +69,19 @@ public class CheckResultListener {
         }
 
         try {
-            return UUID.fromString(key);
+            UUID checkId = UUID.fromString(key);
+            SiteCheckResponse response = deserialize(record.value(), checkId);
+            if (response != null) {
+                store.store(checkId, response);
+                log.info("Stored result for check {} from Kafka topic {}", checkId, record.topic());
+            }
         } catch (IllegalArgumentException ex) {
             log.warn("Received Kafka result with non-UUID key '{}', will try to read id from payload", key);
             return null;
         }
     }
 
-    private SiteCheckResponse deserialize(String payload, UUID keyCheckId) {
+    private SiteCheckResponse deserialize(String payload, UUID checkId) {
         try {
             JsonNode root = objectMapper.readTree(payload);
             if (!(root instanceof ObjectNode objectNode)) {
@@ -85,14 +90,6 @@ public class CheckResultListener {
             }
 
             SiteCheckResponse mapped = objectMapper.treeToValue(root, SiteCheckResponse.class);
-
-            UUID checkId = mapped != null ? mapped.id() : null;
-            if (checkId == null) {
-                checkId = parseCheckId(objectNode);
-            }
-            if (checkId == null) {
-                checkId = keyCheckId;
-            }
 
             Instant executedAt = mapped != null ? mapped.executedAt() : null;
             if (executedAt == null) {
@@ -127,7 +124,7 @@ public class CheckResultListener {
             }
 
             return new SiteCheckResponse(
-                    checkId,
+                    mapped != null && mapped.id() != null ? mapped.id() : checkId,
                     mapped != null ? mapped.target() : null,
                     executedAt,
                     status,
@@ -138,19 +135,6 @@ public class CheckResultListener {
             log.warn("Failed to deserialize Kafka result payload: {}", ex.getOriginalMessage());
             return null;
         }
-    }
-
-    private UUID parseCheckId(ObjectNode objectNode) {
-        JsonNode taskIdNode = objectNode.has("task_id") ? objectNode.get("task_id") : objectNode.get("taskId");
-        if (taskIdNode != null && !taskIdNode.isNull()) {
-            try {
-                return UUID.fromString(taskIdNode.asText());
-            } catch (IllegalArgumentException ex) {
-                log.warn("Kafka result contains non-UUID task_id: {}", taskIdNode.asText());
-            }
-        }
-
-        return null;
     }
 
     private List<CheckExecutionResponse> buildChecksFromPayload(ObjectNode root) {
