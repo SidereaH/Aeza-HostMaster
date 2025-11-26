@@ -12,6 +12,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.fasterxml.jackson.core.type.TypeReference;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
@@ -113,10 +114,10 @@ public class CheckResultListener {
 
             Instant executedAt = mapped != null ? mapped.executedAt() : null;
             if (executedAt == null) {
-                executedAt = parseInstant(objectNode.get("timestamp"));
+                executedAt = parseInstant(resultNode.get("timestamp"));
             }
             if (executedAt == null) {
-                executedAt = parseInstant(objectNode.get("executed_at"));
+                executedAt = parseInstant(resultNode.get("executed_at"));
             }
             if (executedAt == null) {
                 executedAt = Instant.now();
@@ -124,7 +125,7 @@ public class CheckResultListener {
 
             CheckStatus status = mapped != null ? mapped.status() : null;
             if (status == null) {
-                status = mapStatus(objectNode.path("status").asText());
+                status = mapStatus(resultNode.path("status").asText());
             }
             if (status == null) {
                 status = CheckStatus.COMPLETED;
@@ -132,15 +133,27 @@ public class CheckResultListener {
 
             Long duration = mapped != null ? mapped.totalDurationMillis() : null;
             if (duration == null) {
-                JsonNode durationNode = objectNode.get("duration");
+                JsonNode durationNode = resultNode.get("duration");
                 if (durationNode != null && durationNode.canConvertToLong()) {
                     duration = durationNode.asLong();
                 }
             }
 
+            String target = mapped != null ? mapped.target() : null;
+            if (target == null || target.isBlank()) {
+                JsonNode targetNode = resultNode.get("target");
+                if (targetNode == null || targetNode.isNull()) {
+                    targetNode = resultNode.get("hostname");
+                }
+                if (targetNode == null || targetNode.isNull()) {
+                    targetNode = resultNode.get("host");
+                }
+                target = targetNode != null && !targetNode.isNull() ? targetNode.asText() : null;
+            }
+
             List<CheckExecutionResponse> checks = mapped != null ? mapped.checks() : null;
             if (checks == null || checks.isEmpty()) {
-                checks = buildChecksFromPayload(objectNode);
+                checks = buildChecksFromPayload(resultNode);
             }
 
             return new SiteCheckResponse(
@@ -162,6 +175,17 @@ public class CheckResultListener {
         JsonNode nestedPayload = root.get("payload");
         if (nestedPayload instanceof ObjectNode nestedObject) {
             payloadNode = nestedObject;
+        }
+
+        JsonNode checksNode = firstNonNull(root.get("checks"), payloadNode.get("checks"),
+                root.get("results"), payloadNode.get("results"),
+                root.get("details"), payloadNode.get("details"));
+        if (checksNode != null && checksNode.isArray() && checksNode.size() > 0) {
+            try {
+                return objectMapper.convertValue(checksNode, new TypeReference<>() {});
+            } catch (IllegalArgumentException ex) {
+                log.debug("Unable to map checks array from payload: {}", ex.getMessage());
+            }
         }
 
         List<CheckExecutionResponse> checks = new ArrayList<>();
@@ -301,5 +325,25 @@ public class CheckResultListener {
 
     private CheckStatus mapStatus(String statusText) {
         return CheckStatus.fromJson(statusText);
+    }
+
+    private ObjectNode extractResultNode(ObjectNode root) {
+        for (String nodeName : List.of("result", "response", "payload", "data")) {
+            JsonNode nested = root.get(nodeName);
+            if (nested instanceof ObjectNode nestedObject) {
+                return nestedObject;
+            }
+        }
+        return root;
+    }
+
+    @SafeVarargs
+    private final JsonNode firstNonNull(JsonNode... nodes) {
+        for (JsonNode node : nodes) {
+            if (node != null && !node.isNull()) {
+                return node;
+            }
+        }
+        return null;
     }
 }
