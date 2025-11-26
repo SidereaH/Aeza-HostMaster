@@ -56,16 +56,16 @@
             executionResult.setMetrics(toMetricEntities(request.metrics()));
 
             switch (request.type()) {
-                case HTTP -> executionResult.setHttpDetails(toHttpDetails(request.httpDetails()));
-                case PING -> executionResult.setPingDetails(toPingDetails(request.pingDetails()));
-                case TCP_CONNECT -> executionResult.setTcpDetails(toTcpDetails(request.tcpDetails()));
-                case TRACEROUTE -> executionResult.setTracerouteDetails(toTracerouteDetails(request.tracerouteDetails()));
-                case DNS_LOOKUP -> executionResult.setDnsLookupDetails(toDnsLookupDetails(request.dnsLookupDetails()));
+                case HTTP -> executionResult.setHttpDetails(toHttpEntity(request.httpDetails()));
+                case PING -> executionResult.setPingDetails(toPingEntity(request.pingDetails()));
+                case TCP_CONNECT -> executionResult.setTcpDetails(toTcpEntity(request.tcpDetails()));
+                case TRACEROUTE -> executionResult.setTracerouteDetails(toTracerouteEntity(request.tracerouteDetails()));
+                case DNS_LOOKUP -> executionResult.setDnsLookupDetails(toDnsLookupEntity(request.dnsLookupDetails()));
             }
             return executionResult;
         }
 
-        private HttpCheckDetails toHttpDetails(HttpCheckDetailsDto dto) {
+        public HttpCheckDetails toHttpEntity(HttpCheckDetailsDto dto) {
             if (dto == null) {
                 throw new InvalidCheckDetailsException("HTTP check requires response details");
             }
@@ -84,7 +84,7 @@
             return details;
         }
 
-        private PingCheckDetails toPingDetails(PingCheckDetailsDto dto) {
+        public PingCheckDetails toPingEntity(PingCheckDetailsDto dto) {
             if (dto == null) {
                 throw new InvalidCheckDetailsException("Ping check requires metrics");
             }
@@ -99,7 +99,7 @@
             return details;
         }
 
-        private TcpCheckDetails toTcpDetails(TcpCheckDetailsDto dto) {
+        public TcpCheckDetails toTcpEntity(TcpCheckDetailsDto dto) {
             if (dto == null) {
                 throw new InvalidCheckDetailsException("TCP connect check requires port information");
             }
@@ -116,7 +116,7 @@
             return details;
         }
 
-        private TracerouteDetails toTracerouteDetails(TracerouteDetailsDto dto) {
+        public TracerouteDetails toTracerouteEntity(TracerouteDetailsDto dto) {
             if (dto == null) {
                 throw new InvalidCheckDetailsException("Traceroute check requires hop data");
             }
@@ -147,7 +147,7 @@
             return hop;
         }
 
-        private DnsLookupDetails toDnsLookupDetails(DnsLookupDetailsDto dto) {
+        public DnsLookupDetails toDnsLookupEntity(DnsLookupDetailsDto dto) {
             if (dto == null) {
                 throw new InvalidCheckDetailsException("DNS lookup check requires record data");
             }
@@ -176,14 +176,14 @@
             return record;
         }
 
-        private List<CheckMetric> toMetricEntities(List<CheckMetricDto> metrics) {
+        public List<CheckMetric> toMetricEntities(List<CheckMetricDto> metrics) {
             if (metrics == null || metrics.isEmpty()) {
                 return new ArrayList<>();
             }
             return metrics.stream().map(this::toMetricEntity).collect(Collectors.toCollection(ArrayList::new));
         }
 
-        private CheckMetric toMetricEntity(CheckMetricDto dto) {
+        public CheckMetric toMetricEntity(CheckMetricDto dto) {
             if (dto == null || dto.name() == null || dto.name().isBlank()) {
                 throw new InvalidCheckDetailsException("Metric name is required");
             }

@@ -7,8 +7,10 @@ import aeza.hostmaster.checks.dto.CheckMetricDto;
 import aeza.hostmaster.checks.dto.HttpCheckDetailsDto;
 import aeza.hostmaster.checks.dto.PingCheckDetailsDto;
 import aeza.hostmaster.checks.dto.SiteCheckResponse;
-import aeza.hostmaster.checks.entity.*;
-import aeza.hostmaster.checks.repository.SiteCheckRepository;
+import aeza.hostmaster.checks.domain.CheckExecutionResult;
+import aeza.hostmaster.checks.domain.CheckMetric;
+import aeza.hostmaster.checks.domain.SiteCheckResult;
+import aeza.hostmaster.checks.repository.SiteCheckResultRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -23,20 +25,23 @@ import java.util.stream.Collectors;
 @Service
 public class SiteCheckStorageService {
 
-    private final SiteCheckRepository siteCheckRepository;
+    private final SiteCheckResultRepository siteCheckResultRepository;
+    private final SiteCheckMapper siteCheckMapper;
 
-    public SiteCheckStorageService(SiteCheckRepository siteCheckRepository) {
-        this.siteCheckRepository = siteCheckRepository;
+    public SiteCheckStorageService(SiteCheckResultRepository siteCheckResultRepository,
+                                   SiteCheckMapper siteCheckMapper) {
+        this.siteCheckResultRepository = siteCheckResultRepository;
+        this.siteCheckMapper = siteCheckMapper;
     }
 
     @Transactional(readOnly = true)
     public Optional<SiteCheckResponse> findSiteCheck(UUID id) {
-        return siteCheckRepository.findById(id).map(this::mapToResponse);
+        return siteCheckResultRepository.findById(id).map(siteCheckMapper::toResponse);
     }
 
     @Transactional
     public void saveSiteCheck(SiteCheckResponse response) {
-        SiteCheckEntity existing = siteCheckRepository.findById(response.id()).orElse(null);
+        SiteCheckResult existing = siteCheckResultRepository.findById(response.id()).orElse(null);
 
         String target = response.target();
         if ((target == null || target.isBlank()) && existing != null) {
@@ -62,13 +67,16 @@ public class SiteCheckStorageService {
             status = CheckStatus.COMPLETED;
         }
 
-        SiteCheckEntity siteCheck = new SiteCheckEntity(
-                response.id(),
-                target,
-                executedAt,
-                status,
-                response.totalDurationMillis()
-        );
+        SiteCheckResult siteCheck = existing != null ? existing : new SiteCheckResult();
+        siteCheck.setId(response.id());
+        siteCheck.setTarget(target);
+        siteCheck.setExecutedAt(executedAt);
+        siteCheck.setStatus(status);
+        siteCheck.setTotalDurationMillis(response.totalDurationMillis());
+
+        if (existing != null) {
+            siteCheck.getChecks().clear();
+        }
 
         // Сохраняем checks
         List<CheckExecutionResponse> checks = response.checks() == null
@@ -76,43 +84,45 @@ public class SiteCheckStorageService {
                 : response.checks();
 
         checks.forEach(check -> {
-            CheckExecutionEntity checkEntity = new CheckExecutionEntity(
-                    check.id(),
-                    check.type(),
-                    check.status(),
-                    check.durationMillis(),
-                    check.message()
-            );
+            CheckExecutionResult checkEntity = new CheckExecutionResult();
+            checkEntity.setType(check.type());
+            checkEntity.setStatus(check.status());
+            checkEntity.setDurationMillis(check.durationMillis());
+            checkEntity.setMessage(check.message());
 
             // Сохраняем HTTP details если есть
             if (check.httpDetails() != null) {
-                HttpDetailsEntity httpDetails = new HttpDetailsEntity();
-                httpDetails.setId(UUID.randomUUID());
-                httpDetails.setMethod(check.httpDetails().method());
-                httpDetails.setStatusCode(check.httpDetails().statusCode());
-                httpDetails.setResponseTimeMillis(check.httpDetails().responseTimeMillis());
-                httpDetails.setHeaders(check.httpDetails().headers());
-                checkEntity.setHttpDetails(httpDetails);
+                checkEntity.setHttpDetails(siteCheckMapper.toHttpEntity(check.httpDetails()));
             }
 
-            // Сохраняем metrics если есть
+            if (check.pingDetails() != null) {
+                checkEntity.setPingDetails(siteCheckMapper.toPingEntity(check.pingDetails()));
+            }
+
+            if (check.tcpDetails() != null) {
+                checkEntity.setTcpDetails(siteCheckMapper.toTcpEntity(check.tcpDetails()));
+            }
+
+            if (check.tracerouteDetails() != null) {
+                checkEntity.setTracerouteDetails(siteCheckMapper.toTracerouteEntity(check.tracerouteDetails()));
+            }
+
+            if (check.dnsLookupDetails() != null) {
+                checkEntity.setDnsLookupDetails(siteCheckMapper.toDnsLookupEntity(check.dnsLookupDetails()));
+            }
+
             List<CheckMetricDto> metrics = mergeWithPingMetrics(check);
             if (!metrics.isEmpty()) {
-                metrics.forEach(metricDto -> {
-                    CheckMetricEntity metric = new CheckMetricEntity();
-                    metric.setId(UUID.randomUUID());
-                    metric.setName(metricDto.name());
-                    metric.setValue(metricDto.value());
-                    metric.setUnit(metricDto.unit());
-                    metric.setDescription(metricDto.description());
-                    checkEntity.addMetric(metric);
-                });
+                List<CheckMetric> metricEntities = metrics.stream()
+                        .map(siteCheckMapper::toMetricEntity)
+                        .toList();
+                checkEntity.setMetrics(metricEntities);
             }
 
             siteCheck.addCheck(checkEntity);
         });
 
-        siteCheckRepository.save(siteCheck);
+        siteCheckResultRepository.save(siteCheck);
     }
 
     private List<CheckMetricDto> mergeWithPingMetrics(CheckExecutionResponse check) {
@@ -150,55 +160,4 @@ public class SiteCheckStorageService {
         metrics.putIfAbsent(name, new CheckMetricDto(name, value.doubleValue(), unit, description));
     }
 
-    private SiteCheckResponse mapToResponse(SiteCheckEntity entity) {
-        List<CheckExecutionResponse> checks = entity.getChecks().stream()
-                .map(this::mapExecution)
-                .collect(Collectors.toList());
-
-        return new SiteCheckResponse(
-                entity.getId(),
-                entity.getTarget(),
-                entity.getExecutedAt(),
-                entity.getStatus(),
-                entity.getTotalDurationMillis(),
-                checks
-        );
-    }
-
-    private CheckExecutionResponse mapExecution(CheckExecutionEntity entity) {
-        return new CheckExecutionResponse(
-                entity.getId(),
-                entity.getType(),
-                entity.getStatus(),
-                entity.getDurationMillis(),
-                entity.getMessage(),
-                mapHttp(entity),
-                null,
-                null,
-                null,
-                null,
-                entity.getMetrics().stream()
-                        .map(metric -> new CheckMetricDto(
-                                metric.getName(),
-                                metric.getValue(),
-                                metric.getUnit(),
-                                metric.getDescription()
-                        ))
-                        .collect(Collectors.toList())
-        );
-    }
-
-    private HttpCheckDetailsDto mapHttp(CheckExecutionEntity entity) {
-        if (!CheckType.HTTP.equals(entity.getType()) || entity.getHttpDetails() == null) {
-            return null;
-        }
-
-        HttpDetailsEntity details = entity.getHttpDetails();
-        return new HttpCheckDetailsDto(
-                details.getMethod(),
-                details.getStatusCode(),
-                details.getResponseTimeMillis(),
-                details.getHeaders()
-        );
-    }
 }

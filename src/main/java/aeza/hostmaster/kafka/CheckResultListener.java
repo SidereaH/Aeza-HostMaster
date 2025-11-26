@@ -5,11 +5,14 @@ import aeza.hostmaster.checks.domain.CheckType;
 import aeza.hostmaster.checks.dto.CheckExecutionResponse;
 import aeza.hostmaster.checks.dto.PingCheckDetailsDto;
 import aeza.hostmaster.checks.dto.SiteCheckResponse;
+import aeza.hostmaster.checks.service.CheckJobService;
+import aeza.hostmaster.checks.service.SiteCheckStorageService;
 import aeza.hostmaster.service.CheckResultStore;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.fasterxml.jackson.core.type.TypeReference;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
@@ -32,10 +35,17 @@ public class CheckResultListener {
 
     private final CheckResultStore store;
     private final ObjectMapper objectMapper;
+    private final SiteCheckStorageService storageService;
+    private final CheckJobService jobService;
 
-    public CheckResultListener(CheckResultStore store, ObjectMapper objectMapper) {
+    public CheckResultListener(CheckResultStore store,
+                               ObjectMapper objectMapper,
+                               SiteCheckStorageService storageService,
+                               CheckJobService jobService) {
         this.store = store;
         this.objectMapper = objectMapper;
+        this.storageService = storageService;
+        this.jobService = jobService;
     }
 
     @KafkaListener(
@@ -60,6 +70,14 @@ public class CheckResultListener {
         }
 
         store.store(resolvedId, response);
+        storageService.saveSiteCheck(response);
+
+        if (CheckStatus.COMPLETED.equals(response.status())) {
+            jobService.completeJob(resolvedId, response);
+        } else if (response.status() != null) {
+            jobService.updateJobStatus(resolvedId, response.status());
+        }
+
         log.info("Stored result for check {} from Kafka topic {}", resolvedId, record.topic());
     }
 
@@ -77,6 +95,7 @@ public class CheckResultListener {
     }
 
     private SiteCheckResponse deserialize(String payload, UUID checkId) {
+        ObjectNode resultNode = null;
         try {
             JsonNode root = objectMapper.readTree(payload);
             if (!(root instanceof ObjectNode objectNode)) {
@@ -86,12 +105,22 @@ public class CheckResultListener {
 
             SiteCheckResponse mapped = objectMapper.treeToValue(root, SiteCheckResponse.class);
 
+            resultNode = extractResultNode(objectNode);
+
+            UUID resolvedId = mapped != null ? mapped.id() : null;
+            if (resolvedId == null) {
+                resolvedId = parseCheckIdFromPayload(resultNode);
+            }
+            if (resolvedId == null) {
+                resolvedId = checkId;
+            }
+
             Instant executedAt = mapped != null ? mapped.executedAt() : null;
             if (executedAt == null) {
-                executedAt = parseInstant(objectNode.get("timestamp"));
+                executedAt = parseInstant(resultNode.get("timestamp"));
             }
             if (executedAt == null) {
-                executedAt = parseInstant(objectNode.get("executed_at"));
+                executedAt = parseInstant(resultNode.get("executed_at"));
             }
             if (executedAt == null) {
                 executedAt = Instant.now();
@@ -99,7 +128,7 @@ public class CheckResultListener {
 
             CheckStatus status = mapped != null ? mapped.status() : null;
             if (status == null) {
-                status = mapStatus(objectNode.path("status").asText());
+                status = mapStatus(resultNode.path("status").asText());
             }
             if (status == null) {
                 status = CheckStatus.COMPLETED;
@@ -107,20 +136,32 @@ public class CheckResultListener {
 
             Long duration = mapped != null ? mapped.totalDurationMillis() : null;
             if (duration == null) {
-                JsonNode durationNode = objectNode.get("duration");
+                JsonNode durationNode = resultNode.get("duration");
                 if (durationNode != null && durationNode.canConvertToLong()) {
                     duration = durationNode.asLong();
                 }
             }
 
+            String target = mapped != null ? mapped.target() : null;
+            if (target == null || target.isBlank()) {
+                JsonNode targetNode = resultNode.get("target");
+                if (targetNode == null || targetNode.isNull()) {
+                    targetNode = resultNode.get("hostname");
+                }
+                if (targetNode == null || targetNode.isNull()) {
+                    targetNode = resultNode.get("host");
+                }
+                target = targetNode != null && !targetNode.isNull() ? targetNode.asText() : null;
+            }
+
             List<CheckExecutionResponse> checks = mapped != null ? mapped.checks() : null;
             if (checks == null || checks.isEmpty()) {
-                checks = buildChecksFromPayload(objectNode);
+                checks = buildChecksFromPayload(resultNode);
             }
 
             return new SiteCheckResponse(
-                    mapped != null && mapped.id() != null ? mapped.id() : checkId,
-                    mapped != null ? mapped.target() : null,
+                    resolvedId,
+                    target,
                     executedAt,
                     status,
                     duration,
@@ -137,6 +178,17 @@ public class CheckResultListener {
         JsonNode nestedPayload = root.get("payload");
         if (nestedPayload instanceof ObjectNode nestedObject) {
             payloadNode = nestedObject;
+        }
+
+        JsonNode checksNode = firstNonNull(root.get("checks"), payloadNode.get("checks"),
+                root.get("results"), payloadNode.get("results"),
+                root.get("details"), payloadNode.get("details"));
+        if (checksNode != null && checksNode.isArray() && checksNode.size() > 0) {
+            try {
+                return objectMapper.convertValue(checksNode, new TypeReference<>() {});
+            } catch (IllegalArgumentException ex) {
+                log.debug("Unable to map checks array from payload: {}", ex.getMessage());
+            }
         }
 
         List<CheckExecutionResponse> checks = new ArrayList<>();
@@ -219,6 +271,58 @@ public class CheckResultListener {
         }
     }
 
+    private UUID parseCheckIdFromPayload(ObjectNode payload) {
+        UUID id = tryParseUuid(payload.get("taskId"));
+        if (id != null) {
+            return id;
+        }
+
+        id = tryParseUuid(payload.get("task_id"));
+        if (id != null) {
+            return id;
+        }
+
+        id = tryParseUuid(payload.get("jobId"));
+        if (id != null) {
+            return id;
+        }
+
+        id = tryParseUuid(payload.get("job_id"));
+        if (id != null) {
+            return id;
+        }
+
+        id = tryParseUuid(payload.get("id"));
+        if (id != null) {
+            return id;
+        }
+
+        for (String nodeName : List.of("response", "payload", "data", "result")) {
+            JsonNode nested = payload.get(nodeName);
+            if (nested instanceof ObjectNode nestedObject) {
+                id = parseCheckIdFromPayload(nestedObject);
+                if (id != null) {
+                    return id;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    private UUID tryParseUuid(JsonNode node) {
+        if (node == null || node.isNull()) {
+            return null;
+        }
+
+        try {
+            return UUID.fromString(node.asText());
+        } catch (IllegalArgumentException ex) {
+            log.debug("Unable to parse check id from value {}", node.asText());
+            return null;
+        }
+    }
+
     private Instant parseInstant(JsonNode value) {
         if (value == null || value.isNull()) {
             return null;
@@ -234,5 +338,25 @@ public class CheckResultListener {
 
     private CheckStatus mapStatus(String statusText) {
         return CheckStatus.fromJson(statusText);
+    }
+
+    private ObjectNode extractResultNode(ObjectNode root) {
+        for (String nodeName : List.of("result", "response", "payload", "data")) {
+            JsonNode nested = root.get(nodeName);
+            if (nested instanceof ObjectNode nestedObject) {
+                return nestedObject;
+            }
+        }
+        return root;
+    }
+
+    @SafeVarargs
+    private final JsonNode firstNonNull(JsonNode... nodes) {
+        for (JsonNode node : nodes) {
+            if (node != null && !node.isNull()) {
+                return node;
+            }
+        }
+        return null;
     }
 }
