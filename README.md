@@ -89,6 +89,154 @@ docker-compose ps
 
 ---
 
+## 📮 Примеры запросов в Postman
+
+> Укажите свой способ авторизации в Postman (Bearer Token/Basic/Auth2). В примерах ниже используются только URL и тело запроса.
+
+### 1) Создать таск на проверку сайта
+
+- **Method**: `POST`
+- **URL**: `http://localhost:8080/api/checks`
+- **Headers**: `Content-Type: application/json`
+- **Body (raw / JSON)**:
+
+```json
+{
+  "target": "https://example.com",
+  "checkTypes": ["HTTP", "PING", "TCP", "DNS_LOOKUP", "TRACEROUTE"],
+  "tcpConfig": {
+    "port": 443,
+    "timeoutMillis": 5000
+  },
+  "dnsConfig": {
+    "recordTypes": ["A", "AAAA", "MX"],
+    "dnsServer": "8.8.8.8"
+  },
+  "tracerouteConfig": {
+    "maxHops": 20,
+    "timeoutMillis": 2000
+  }
+}
+```
+
+**Успешный ответ (202 Accepted)**:
+
+```json
+{
+  "jobId": "6f46b7c4-74f4-4388-8f77-5fb547e1f3c9",
+  "target": "https://example.com",
+  "status": "PENDING",
+  "executedAt": null,
+  "finishedAt": null,
+  "totalDurationMillis": null,
+  "result": null
+}
+```
+
+Запишите `jobId` в переменную окружения Postman (например, `checkJobId`).
+
+### 2) Получить статус задачи
+
+- **Method**: `GET`
+- **URL**: `http://localhost:8080/api/checks/{{checkJobId}}`
+
+Пример ответа (200 OK):
+
+```json
+{
+  "jobId": "6f46b7c4-74f4-4388-8f77-5fb547e1f3c9",
+  "target": "https://example.com",
+  "status": "COMPLETED",
+  "executedAt": "2023-09-19T12:45:21Z",
+  "finishedAt": "2023-09-19T12:45:37Z",
+  "totalDurationMillis": 16000,
+  "result": {
+    "target": "https://example.com",
+    "http": {
+      "statusCode": 200,
+      "responseTimeMillis": 120
+    }
+  }
+}
+```
+
+### 3) Получить финальный результат
+
+- **Method**: `GET`
+- **URL**: `http://localhost:8080/api/checks/{{checkJobId}}/result`
+
+Если результат ещё не готов, сервер вернёт `202 Accepted`. Готовый результат приходит со статусом `200 OK` и тем же форматом `result`, что и в ответе на статус задачи.
+
+### 4) Получить результат, пришедший из Kafka topic `check-results`
+
+Бэкенд слушает Kafka topic `check-results` и принимает результаты в формате:
+
+```json
+{
+  "task_id": "d7292def-18a0-41f2-907a-1fd282ae9405",
+  "agent_id": "siderea_78",
+  "status": "success",
+  "duration": 3076,
+  "error": "",
+  "timestamp": "2025-11-23T18:53:05.615841932+03:00",
+  "payload": {
+    "ping": [
+      {
+        "country": "sidereagisart_78",
+        "ip": "213.180.204.186",
+        "location": "siderea_78",
+        "packets": {
+          "loss": "0%",
+          "received": 4,
+          "transmitted": 4
+        },
+        "roundTrip": {
+          "avg": "45.360 ms",
+          "max": "47.368 ms",
+          "min": "43.657 ms"
+        }
+      }
+    ]
+  }
+}
+```
+
+Когда такое сообщение попадает в Kafka, результат можно прочитать через Postman запросом:
+
+- **Method**: `GET`
+- **URL**: `http://localhost:8080/api/checks/{{checkJobId}}/result`
+
+Пример готового ответа (200 OK) после получения сообщения из Kafka:
+
+```json
+{
+  "id": "d7292def-18a0-41f2-907a-1fd282ae9405",
+  "target": null,
+  "executedAt": "2025-11-23T15:53:05.615841932Z",
+  "status": "OK",
+  "totalDurationMillis": 3076,
+  "checks": [
+    {
+      "id": "2c26838a-c17e-428a-97f6-7e6ee992df6b",
+      "type": "PING",
+      "status": "OK",
+      "pingDetails": {
+        "packetsTransmitted": 4,
+        "packetsReceived": 4,
+        "packetLossPercentage": 0.0,
+        "minimumRttMillis": 43.657,
+        "averageRttMillis": 45.36,
+        "maximumRttMillis": 47.368,
+        "standardDeviationRttMillis": null
+      },
+      "metrics": []
+    }
+  ]
+}
+```
+
+---
+
 ## 🤖 Регистрация агента
 
 ### 1. Ручная регистрация через API
