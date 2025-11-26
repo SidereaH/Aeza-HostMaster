@@ -69,12 +69,7 @@ public class CheckResultListener {
         }
 
         try {
-            UUID checkId = UUID.fromString(key);
-            SiteCheckResponse response = deserialize(record.value(), checkId);
-            if (response != null) {
-                store.store(checkId, response);
-                log.info("Stored result for check {} from Kafka topic {}", checkId, record.topic());
-            }
+            return UUID.fromString(key);
         } catch (IllegalArgumentException ex) {
             log.warn("Received Kafka result with non-UUID key '{}', will try to read id from payload", key);
             return null;
