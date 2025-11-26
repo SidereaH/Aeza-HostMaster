@@ -104,11 +104,9 @@ public class CheckResultListener {
 
             SiteCheckResponse mapped = objectMapper.treeToValue(root, SiteCheckResponse.class);
 
-            ObjectNode resultNode = extractResultNode(objectNode);
-
             UUID resolvedId = mapped != null ? mapped.id() : null;
             if (resolvedId == null) {
-                resolvedId = parseCheckIdFromPayload(resultNode);
+                resolvedId = parseCheckIdFromPayload(objectNode);
             }
             if (resolvedId == null) {
                 resolvedId = checkId;
@@ -160,7 +158,7 @@ public class CheckResultListener {
 
             return new SiteCheckResponse(
                     resolvedId,
-                    target,
+                    mapped != null ? mapped.target() : null,
                     executedAt,
                     status,
                     duration,
@@ -277,16 +275,6 @@ public class CheckResultListener {
         }
 
         id = tryParseUuid(payload.get("task_id"));
-        if (id != null) {
-            return id;
-        }
-
-        id = tryParseUuid(payload.get("jobId"));
-        if (id != null) {
-            return id;
-        }
-
-        id = tryParseUuid(payload.get("job_id"));
         if (id != null) {
             return id;
         }
