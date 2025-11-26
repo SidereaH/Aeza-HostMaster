@@ -98,7 +98,7 @@ public class KafkaSiteCheckService {
     }
 
     @KafkaListener(
-            topics = "${app.kafka.results-topic:checks-results}",
+            topics = "${app.kafka.results-topic:check-results}",
             autoStartup = "${app.kafka.agent-listeners-enabled:false}"
     )
     public void handleSiteCheckResult(ConsumerRecord<String, String> record) {
@@ -439,7 +439,16 @@ public class KafkaSiteCheckService {
     private List<CheckExecutionResponse> buildChecksFromAgentPayload(ObjectNode response) {
         List<CheckExecutionResponse> checks = new ArrayList<>();
 
+        ObjectNode payloadNode = response;
+        JsonNode nestedPayload = response.get("payload");
+        if (nestedPayload instanceof ObjectNode nestedObject) {
+            payloadNode = nestedObject;
+        }
+
         JsonNode pingNode = response.get("ping");
+        if (pingNode == null) {
+            pingNode = payloadNode.get("ping");
+        }
         if (pingNode != null) {
             PingCheckDetailsDto pingDetails = mapPingDetails(pingNode);
             if (pingDetails != null) {
