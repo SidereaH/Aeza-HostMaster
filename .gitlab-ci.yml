@@ -33,4 +33,5 @@ build-compose:
     - docker compose version
   script:
     - docker compose build --pull --no-cache
+    - docker compose down
     - docker compose up -d
