@@ -7,5 +7,4 @@ public record HttpCheckDetailsDto(
         Integer statusCode,
         Long responseTimeMillis,
         Map<String, String> headers
-) {
-}
+) {}

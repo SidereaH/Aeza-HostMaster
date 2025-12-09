@@ -4,12 +4,11 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.databind.JsonNode;
 
 public record AgentCheckResult(
-        @JsonProperty("task_id") String taskId,
-        @JsonProperty("agent_id") String agentId,
-        String status,
-        Long duration,
-        String error,
-        String timestamp,
-        JsonNode payload
-) {
-}
+        String taskId,     // UUID как строка
+        String agentId,    // идентификатор агента
+        String status,     // "success", "failed", "error" и т.п.
+        Long duration,     // длительность проверки в мс
+        String error,      // текст ошибки, если есть
+        String timestamp,  // ISO-строка времени
+        JsonNode payload   // "сырой" payload агента (http/dns/ping/tcp/traceroute)
+) {}

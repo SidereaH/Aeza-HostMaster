@@ -15,5 +15,4 @@ public record CheckExecutionRequest(
         TracerouteDetailsDto tracerouteDetails,
         DnsLookupDetailsDto dnsLookupDetails,
         List<CheckMetricDto> metrics
-) {
-}
+) {}

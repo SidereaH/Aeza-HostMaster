@@ -4,5 +4,4 @@ public record TcpCheckDetailsDto(
         Integer port,
         Long connectionTimeMillis,
         String address
-) {
-}
+) {}

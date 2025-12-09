@@ -5,5 +5,4 @@ public record CheckMetricDto(
         Double value,
         String unit,
         String description
-) {
-}
+) {}

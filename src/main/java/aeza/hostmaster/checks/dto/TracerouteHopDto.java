@@ -9,5 +9,4 @@ public record TracerouteHopDto(
         Double longitude,
         String country,
         String city
-) {
-}
+) {}

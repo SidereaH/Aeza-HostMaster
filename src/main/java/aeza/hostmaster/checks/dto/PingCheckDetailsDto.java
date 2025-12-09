@@ -8,5 +8,4 @@ public record PingCheckDetailsDto(
         Long averageRttMillis,
         Long maximumRttMillis,
         Long standardDeviationRttMillis
-) {
-}
+) {}

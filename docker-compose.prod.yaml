@@ -16,77 +16,33 @@ services:
       timeout: 5s
       retries: 5
     volumes:
+      # Именованный том для данных Postgres
       - pg-data:/var/lib/postgresql/data
-    networks:
-      - aeza-net
-
-  zookeeper:
-    image: confluentinc/cp-zookeeper:7.6.0
-    restart: unless-stopped
-    environment:
-      ZOOKEEPER_CLIENT_PORT: 2181
-      ZOOKEEPER_TICK_TIME: 2000
-    ports:
-      - "2181:2181"
-    networks:
-      - aeza-net
-
-  kafka:
-    image: confluentinc/cp-kafka:7.6.0
-    restart: unless-stopped
-    depends_on:
-      - zookeeper
-    ports:
-      - "9092:9092"
-    environment:
-      KAFKA_BROKER_ID: 1
-      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
-      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092
-      # Внутри docker-сети сервис будет доступен по имени "kafka"
-      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
-      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
-      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
-      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
-      KAFKA_MIN_INSYNC_REPLICAS: 1
-    networks:
-      - aeza-net
 
   app:
-    build: .
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: aeza-hostmaster:latest
     depends_on:
       postgres:
         condition: service_healthy
-      kafka:
-        condition: service_started
     environment:
-      # Настройки БД (перекрывают application.properties)
       SPRING_DATASOURCE_URL: ${SPRING_DATASOURCE_URL:-jdbc:postgresql://postgres:5432/${POSTGRES_DB:-homerep_userservice}}
       SPRING_DATASOURCE_USERNAME: ${SPRING_DATASOURCE_USERNAME:-${POSTGRES_USER:-postgres}}
       SPRING_DATASOURCE_PASSWORD: ${SPRING_DATASOURCE_PASSWORD:-${POSTGRES_PASSWORD:-postgres}}
       SPRING_JPA_HIBERNATE_DDL_AUTO: ${SPRING_JPA_HIBERNATE_DDL_AUTO:-update}
-
-      # Обязательный секрет — ДОЛЖЕН быть задан (в .env или через env)
       HOMEREP_SECRET: ${HOMEREP_SECRET:?HOMEREP_SECRET is not set}
       HOMEREP_LIFETIME: ${HOMEREP_LIFETIME:-600000}
-
       SPRING_KAFKA_BOOTSTRAP_SERVERS: ${SPRING_KAFKA_BOOTSTRAP_SERVERS:-kafka:9092}
       SPRING_KAFKA_PRODUCER_KEY_SERIALIZER: org.apache.kafka.common.serialization.StringSerializer
       SPRING_KAFKA_PRODUCER_VALUE_SERIALIZER: org.apache.kafka.common.serialization.StringSerializer
-      SPRING_KAFKA_CONSUMER_GROUP_ID: hostmaster-group
-
       SPRING_SECURITY_USER_NAME: ${APP_USER:-admin}
       SPRING_SECURITY_USER_PASSWORD: ${APP_PASSWORD:-admin}
       SPRING_SECURITY_USER_ROLE: ${APP_ROLE:-AGENT}
-
+      SPRING_KAFKA_CONSUMER_GROUP_ID: hostmaster-group
     ports:
       - "8080:8080"
-    networks:
-      - aeza-net
 
 volumes:
   pg-data:
-
-networks:
-  aeza-net:
-    name: aeza-net
-    driver: bridge

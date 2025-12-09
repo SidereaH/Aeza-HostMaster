@@ -6,5 +6,5 @@ public record DnsRecordDto(
         DnsRecordType type,
         String value,
         Long ttl
-) {
-}
+) {}
+
