@@ -58,6 +58,7 @@ services:
 #        condition: service_healthy
 #      kafka:
 #        condition: service_started
+    container_name: hostmaster_app
     environment:
       # Настройки БД (перекрывают application.properties)
       SPRING_DATASOURCE_URL: ${SPRING_DATASOURCE_URL:-jdbc:postgresql://postgres:5432/${POSTGRES_DB:-homerep_userservice}}
