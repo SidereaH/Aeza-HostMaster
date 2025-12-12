@@ -110,7 +110,7 @@ git clone https://sourcecraft.dev/hmae/agent-aeza
 cd agent-aeza
 
 # Отредактируйте переменные, либо добавьте AGENT_NAME, AGENT_TOKEN, AGENT_COUNTRY в .env
-nano docker-compose.yaml
+nano docker-compose.prod.yaml
 
 # Запустите агент
 docker compose up -d && docker compose logs -f 
