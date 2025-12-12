@@ -5,24 +5,11 @@ import java.time.Instant;
 import java.util.Map;
 
 public record AgentTaskMessage(
-        @JsonProperty("task_id")
-        String taskId,
-
-        @JsonProperty("type")
-        String type,          // "http", "ping", "dns", "tcp", "traceroute"
-
-        @JsonProperty("target")
+        @JsonProperty("task_id") String taskId,
+        String type,
         String target,
-
-        @JsonProperty("parameters")
         Map<String, Object> parameters,
-
-        @JsonProperty("scheduled_at")
-        Instant scheduledAt,
-
-        @JsonProperty("created_at")
-        Instant createdAt,
-
-        @JsonProperty("timeout")
-        int timeoutSeconds
+        @JsonProperty("scheduled_at") Instant scheduledAt,
+        @JsonProperty("created_at") Instant createdAt,
+        Integer timeout
 ) {}

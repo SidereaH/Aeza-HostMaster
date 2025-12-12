@@ -72,10 +72,7 @@ public class SecurityConfig {
         return provider;
     }
 
-    @Bean
-    public AuthenticationManager authenticationManager(AuthenticationConfiguration authConfig) throws Exception {
-        return authConfig.getAuthenticationManager();
-    }
+
     @Bean
     public SecurityFilterChain filterChain(
             HttpSecurity http,
@@ -95,14 +92,21 @@ public class SecurityConfig {
                                 "/swagger-ui/**",
                                 "/v3/api-docs/**",
                                 "/swagger-resources/**",
-                                "/webjars/**"
+                                "/webjars/**",
+                                "/ws/**",
+                                "/api/checks/ws/**",
+                                "/api/checks/socket/**"
+
                         ).permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/metric").hasRole("AGENT")
                         .requestMatchers(HttpMethod.GET, "/api/agent/**").hasRole("ADMIN")
                         .requestMatchers("/api/checks/**").hasRole("ADMIN")
+                        .requestMatchers("/api/checks/socket/**").permitAll()
+                        .requestMatchers("/ws/**").permitAll()
+                        .requestMatchers("/topic/**").permitAll()
+                        .requestMatchers("/app/**").permitAll()
                         .anyRequest().authenticated()
                 )
-                .userDetailsService(adminUserDetailsService)
                 .httpBasic(Customizer.withDefaults())
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authenticationProvider(adminAuthenticationProvider)
