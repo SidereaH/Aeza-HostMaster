@@ -13,14 +13,24 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
 
     @Override
     public void configureMessageBroker(MessageBrokerRegistry config) {
-        config.enableSimpleBroker("/topic");
-        config.setApplicationDestinationPrefixes("/app");
+        config.enableSimpleBroker("/topic"); // публикации (клиент подписывается)
+        config.setApplicationDestinationPrefixes("/app"); // сообщения от клиента (нам не нужно, но пусть будет)
     }
+
 
     @Override
     public void registerStompEndpoints(StompEndpointRegistry registry) {
-        registry.addEndpoint("/ws")
+        // Обычный WebSocket (для Postman, wscat и т.п.)
+        registry
+                .addEndpoint("/ws")
+                .setAllowedOriginPatterns("*");
+
+        // SockJS для браузеров
+        registry
+                .addEndpoint("/ws-sockjs")
                 .setAllowedOriginPatterns("*")
                 .withSockJS();
     }
+
+
 }

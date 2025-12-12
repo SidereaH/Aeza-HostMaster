@@ -1,7 +1,5 @@
 package aeza.hostmaster.checks.entity;
 
-import aeza.hostmaster.checks.domain.CheckStatus;
-import aeza.hostmaster.checks.domain.CheckType;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import lombok.Getter;
@@ -11,10 +9,10 @@ import java.time.Instant;
 import java.util.UUID;
 
 @Entity
-@Table(name = "check_executions")
+@Table(name = "check_logs")
 @Getter
 @Setter
-public class CheckExecutionEntity {
+public class CheckLogEntity {
 
     @Id
     @GeneratedValue
@@ -25,25 +23,11 @@ public class CheckExecutionEntity {
     @JsonIgnore
     private SiteCheckEntity siteCheck;
 
-    @Enumerated(EnumType.STRING)
-    private CheckType type;
-
-    @Enumerated(EnumType.STRING)
-    private CheckStatus status;
-
-    @Column
-    private Long durationMillis;
-
     @Column(columnDefinition = "TEXT")
-    private String rawPayloadJson;
+    private String rawJson;
 
     @Column
     private Instant timestamp;
 
-    @Column
-    private String message;
-
-    public CheckExecutionEntity() {}
-
-    // GETTERS + SETTERS
+    public CheckLogEntity() {}
 }

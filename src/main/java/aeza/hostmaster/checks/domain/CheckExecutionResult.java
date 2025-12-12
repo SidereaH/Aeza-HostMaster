@@ -15,12 +15,18 @@ import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
+import lombok.Getter;
+import lombok.Setter;
+
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
 @Entity
 @Table(name = "check_execution_results")
+@Getter
+@Setter
+
 public class CheckExecutionResult {
 
     @Id
@@ -51,6 +57,7 @@ public class CheckExecutionResult {
     @Embedded
     private TcpCheckDetails tcpDetails;
 
+    @Setter
     @Embedded
     private TracerouteDetails tracerouteDetails;
 
@@ -64,96 +71,4 @@ public class CheckExecutionResult {
     @ManyToOne(fetch = FetchType.LAZY, cascade = CascadeType.PERSIST)
     @JoinColumn(name = "site_check_result_id")
     private SiteCheckResult siteCheckResult;
-
-    public UUID getId() {
-        return id;
-    }
-
-    public CheckType getType() {
-        return type;
-    }
-
-    public void setType(CheckType type) {
-        this.type = type;
-    }
-
-    public CheckStatus getStatus() {
-        return status;
-    }
-
-    public void setStatus(CheckStatus status) {
-        this.status = status;
-    }
-
-    public Long getDurationMillis() {
-        return durationMillis;
-    }
-
-    public void setDurationMillis(Long durationMillis) {
-        this.durationMillis = durationMillis;
-    }
-
-    public String getMessage() {
-        return message;
-    }
-
-    public void setMessage(String message) {
-        this.message = message;
-    }
-
-    public HttpCheckDetails getHttpDetails() {
-        return httpDetails;
-    }
-
-    public void setHttpDetails(HttpCheckDetails httpDetails) {
-        this.httpDetails = httpDetails;
-    }
-
-    public PingCheckDetails getPingDetails() {
-        return pingDetails;
-    }
-
-    public void setPingDetails(PingCheckDetails pingDetails) {
-        this.pingDetails = pingDetails;
-    }
-
-    public TcpCheckDetails getTcpDetails() {
-        return tcpDetails;
-    }
-
-    public void setTcpDetails(TcpCheckDetails tcpDetails) {
-        this.tcpDetails = tcpDetails;
-    }
-
-    public TracerouteDetails getTracerouteDetails() {
-        return tracerouteDetails;
-    }
-
-    public void setTracerouteDetails(TracerouteDetails tracerouteDetails) {
-        this.tracerouteDetails = tracerouteDetails;
-    }
-
-    public DnsLookupDetails getDnsLookupDetails() {
-        return dnsLookupDetails;
-    }
-
-    public void setDnsLookupDetails(DnsLookupDetails dnsLookupDetails) {
-        this.dnsLookupDetails = dnsLookupDetails;
-    }
-
-    public List<CheckMetric> getMetrics() {
-        return metrics;
-    }
-
-    public void setMetrics(List<CheckMetric> metrics) {
-        this.metrics = metrics;
-    }
-
-    public SiteCheckResult getSiteCheckResult() {
-        return siteCheckResult;
-    }
-
-    public void setSiteCheckResult(SiteCheckResult siteCheckResult) {
-        this.siteCheckResult = siteCheckResult;
-    }
 }
